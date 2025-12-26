@@ -17,67 +17,93 @@ Diagram showing the system's operation and data flow.
 
 ```mermaid
 graph TD
-    User[User / Staff] -->|Access via Web Browser| Frontend[Frontend (Next.js)]
-    Admin[Admin] -->|Manage System| Frontend
+    User["User / Staff"] -->|Access via Web Browser| Frontend["Frontend (Next.js)"]
+    Admin["Admin"] -->|Manage System| Frontend
 
     subgraph "Frontend Application"
-        Frontend -->|HTTP Requests (Axios)| API[Backend API (Express.js)]
-        Frontend -->|Real-time Updates (Socket.io)| Socket[Socket Server]
+        Frontend -->|HTTP Requests (Axios)| API["Backend API (Express.js)"]
+        Frontend -->|Real-time Updates (Socket.io)| Socket["Socket Server"]
     end
 
     subgraph "Backend Server"
-        API -->|Auth & Logic| Controller[Controllers]
+        API -->|Auth & Logic| Controller["Controllers"]
         Socket -->|Event Handling| Controller
-        Controller -->|ORM Queries| Prisma[Prisma Client]
-        Scheduler[Cron Scheduler] -->|Trigger PM Tasks| Controller
+        Controller -->|ORM Queries| Prisma["Prisma Client"]
+        Scheduler["Cron Scheduler"] -->|Trigger PM Tasks| Controller
     end
 
     subgraph "Database"
-        Prisma -->|Read/Write| DB[(SQL Server Database)]
+        Prisma -->|Read/Write| DB[("SQL Server Database")]
     end
 
-    Controller -->|File Storage| Uploads[Uploads Folder]
+    Controller -->|File Storage| Uploads["Uploads Folder"]
 ```
 
-## 3. Features
+## 3. Tech Stack
+
+The technologies used in this project include:
+
+### Frontend
+- **Framework**: Next.js (React)
+- **Styling**: Bootstrap, Tailwind CSS
+- **HTTP Client**: Axios
+- **Real-time Communication**: Socket.io Client
+- **Utilities**: SweetAlert2, Dnd Kit, Recharts, jsPDF, XLSX
+
+### Backend
+- **Runtime**: Node.js
+- **Framework**: Express.js
+- **Database ORM**: Prisma
+- **Real-time Communication**: Socket.io
+- **Scheduling**: Node-cron
+- **Email**: Nodemailer
+
+### Database
+- **Database System**: SQL Server
+
+### Tools & DevOps
+- **Version Control**: Git & GitHub
+- **Package Manager**: npm
+
+## 4. Features
 
 The system consists of the following main functions:
 
-### 3.1 Dashboard
+### 4.1 Dashboard
 - Overview of all machine statuses.
 - Graphs displaying operational performance and PM plans.
 - Notifications for upcoming maintenance tasks.
 
-### 3.2 Machine Management
+### 4.2 Machine Management
 - Machine Master registry.
 - Management of Machine Types.
 - Tracking of machine operational status.
 
-### 3.3 Preventive Maintenance (PM)
+### 4.3 Preventive Maintenance (PM)
 - PM Planning.
 - PM Result Recording.
 - Management of Preventive Types.
 - Notification system for scheduled PM cycles.
 
-### 3.4 User Management
+### 4.4 User Management
 - User Master and access rights management.
 - Login/Authentication system.
 
-### 3.5 Reports
+### 4.5 Reports
 - Maintenance history reports.
 - Data export to Excel/PDF.
 
-### 3.6 Real-time Features
+### 4.6 Real-time Features
 - Real-time machine status updates using Socket.io.
 
-## 4. Usage
+## 5. Usage
 
 ### Prerequisites
 - Node.js (v18 or higher recommended)
 - SQL Server
 - Git
 
-### 4.1 Backend Installation & Setup
+### 5.1 Backend Installation & Setup
 
 1. Navigate to the backend folder:
    ```bash
@@ -94,7 +120,7 @@ The system consists of the following main functions:
    ```
    The server will run on the specified port (Default: 5003).
 
-### 4.2 Frontend Installation & Setup
+### 5.2 Frontend Installation & Setup
 
 1. Navigate to the frontend folder:
    ```bash
@@ -115,6 +141,6 @@ The system consists of the following main functions:
    ```
 4. Open your browser and go to `http://localhost:3000` (or the configured port).
 
-### 4.3 Project Structure
+### 5.3 Project Structure
 - **backend/**: Source code for Server API, Database connection, Scheduler.
 - **frontend/my-app/**: Source code for the Web Interface (Next.js), Components, Pages.
