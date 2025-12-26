@@ -1,0 +1,210 @@
+:root {
+  --primary-color: #0d6efd;
+  --success-color: #198754;
+  --warning-color: #ffc107;
+  --danger-color: #dc3545;
+  --dark-text: #212529;
+  --light-bg: #f0f2f5;
+  /* Slightly darker than white for better contrast with cards */
+}
+
+body {
+  background-color: var(--light-bg);
+  color: var(--dark-text);
+  font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+/* High Contrast Cards */
+.card {
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  background-color: white;
+  margin-bottom: 1.5rem;
+}
+
+.card-header {
+  background-color: white;
+  border-bottom: 2px solid #f0f0f0;
+  font-weight: 700;
+  padding: 1rem 1.5rem;
+}
+
+/* Solid Badges for Readability - Override Bootstrap utilities */
+.badge {
+  font-size: 0.85em;
+  padding: 0.5em 1em;
+  border-radius: 6px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Force solid colors for critical statuses instead of bg-opacity */
+.badge-status-ok {
+  background-color: var(--success-color) !important;
+  color: white !important;
+}
+
+.badge-status-warning {
+  background-color: var(--warning-color) !important;
+  color: #000 !important;
+}
+
+.badge-status-danger {
+  background-color: var(--danger-color) !important;
+  color: white !important;
+}
+
+.badge-status-neutral {
+  background-color: #6c757d !important;
+  color: white !important;
+}
+
+/* Clear Tables */
+.table {
+  margin-bottom: 0;
+}
+
+.table thead th {
+  background-color: #2c3e50 !important;
+  /* Dark Blue-Grey Header */
+  color: white !important;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.9rem;
+  letter-spacing: 0.5px;
+  padding: 1rem;
+  border: none;
+  white-space: nowrap;
+}
+
+.table tbody td {
+  padding: 1rem;
+  vertical-align: middle;
+  font-weight: 500;
+  color: #333;
+  border-bottom: 1px solid #eee;
+}
+
+.table-hover tbody tr:hover {
+  background-color: #e8f0fe;
+  /* Light Blue Hover */
+}
+
+/* Buttons */
+.btn {
+  font-weight: 600;
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+  box-shadow: 0 4px 6px rgba(13, 110, 253, 0.2);
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 8px rgba(13, 110, 253, 0.3);
+}
+
+/* Form Controls */
+.form-control,
+.form-select {
+  padding: 0.7rem 1rem;
+  border-radius: 8px;
+  border: 1px solid #ced4da;
+  font-size: 1rem;
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.15);
+}
+
+.form-label {
+  font-weight: 600;
+  color: #495057;
+  margin-bottom: 0.5rem;
+}
+
+/* Enhanced Table Borders for High Contrast */
+.table-bordered> :not(caption)>*>* {
+  border-width: 1px;
+  border-color: #adb5bd !important;
+  /* Darker grey for clear separation */
+}
+
+/* Read-only inputs styling */
+.form-control:disabled,
+.form-control[readonly] {
+  background-color: #e9ecef;
+  opacity: 1;
+  color: #212529;
+  /* Darker text for readability */
+  font-weight: 500;
+  border-color: #ced4da;
+}
+
+/* Navbar Tweaks */
+.navbar {
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.nav-link {
+  font-weight: 500;
+}
+
+.nav-link.active {
+  font-weight: 700;
+  border-bottom: 2px solid white;
+}
+
+/* Pagination Polish */
+.page-item.active .page-link {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(13, 110, 253, 0.3);
+}
+
+.page-link {
+  color: var(--primary-color);
+  font-weight: 500;
+  border-radius: 4px;
+  margin: 0 2px;
+  border: 1px solid #dee2e6;
+}
+
+/* Smooth Fade In Animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.container-fluid {
+  animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.spin-animation {
+    animation: spin 1s linear infinite;
+    display: inline-block;
+}

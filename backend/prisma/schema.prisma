@@ -1,0 +1,198 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+}
+
+model Machine {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique // Machine No. e.g. A001
+  name      String
+  model     String?
+  location  String?
+  image     String? // Path to machine image
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pmPlans MachinePMPlan[]
+
+  machineMasterId    Int?
+  machineMaster      MachineMaster?      @relation(fields: [machineMasterId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  checklistTemplates ChecklistTemplate[]
+  pmrecords          PMRecord[]
+  assignedUsers      UserMaster[] // [NEW] Assigned users for this machine
+}
+
+model MachineMaster {
+  id          Int     @id @default(autoincrement())
+  code        String  @unique // e.g. "MC-001"
+  name        String // e.g. "Injection Machine A"
+  description String?
+
+  machineTypeId Int?
+  machineType   MachineType? @relation(fields: [machineTypeId], references: [id])
+
+  machines Machine[] // Relation to Machine
+
+  @@index([machineTypeId])
+}
+
+model MachineType {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique
+  description String?
+
+  areaId Int?
+  area   Area? @relation(fields: [areaId], references: [id])
+
+  machineMasters MachineMaster[]
+
+  @@index([areaId])
+}
+
+model PreventiveType {
+  id            Int     @id @default(autoincrement())
+  name          String  @unique
+  description   String?
+  image         String? // [NEW] Image for the preventive type (diagram)
+  isFixedDate   Boolean @default(true) // [NEW] True = Fixed Date (Strict), False = Floating (Based on completion)
+  postponeLogic String  @default("SHIFT") // [NEW] "SHIFT" (Move future dates) or "MAINTAIN_CYCLE" (Keep original cycle)
+
+  // Removed areaId as it's no longer the parent in hierarchy
+
+  pmPlans          MachinePMPlan[]
+  masterChecklists MasterChecklist[]
+  pmRecords        PMRecord[]
+}
+
+model MasterChecklist {
+  id               Int              @id @default(autoincrement())
+  preventiveTypeId Int
+  preventiveType   PreventiveType   @relation(fields: [preventiveTypeId], references: [id])
+  topic            String
+  description      String?
+  type             String // "BOOLEAN" or "NUMERIC"
+  minVal           Float?
+  maxVal           Float?
+  options          String? // [NEW] JSON string for DROPDOWN options
+  isRequired       Boolean          @default(false) // [NEW] Whether this field is mandatory
+  useValueLimit    Boolean          @default(false) // [NEW] Enable rate limiting for values
+  valueLimitCount  Int              @default(0) // [NEW] Max times a value can be used
+  valueLimitHours  Int              @default(0) // [NEW] Time window in hours
+  isActive         Boolean          @default(true) // [NEW] Status of the checklist item
+  order            Int              @default(0)
+  pmDetails        PMRecordDetail[]
+}
+
+model MachinePMPlan {
+  id        Int     @id @default(autoincrement())
+  machineId Int
+  machine   Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+
+  preventiveTypeId Int
+  preventiveType   PreventiveType @relation(fields: [preventiveTypeId], references: [id])
+
+  frequencyDays     Int // Cleaning Freq (Day)
+  advanceNotifyDays Int // Alarm Before Cleaning (Day)
+
+  lastPMDate      DateTime? // Last Cleaning
+  nextPMDate      DateTime? // Next Cleaning
+  lastCheckStatus String? // [NEW] Cache for last PM result (ALL_OK / HAS_NG)
+
+  @@unique([machineId, preventiveTypeId])
+  @@index([machineId])
+  @@index([preventiveTypeId])
+}
+
+model ChecklistTemplate {
+  id          Int     @id @default(autoincrement())
+  machineId   Int
+  machine     Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  topic       String
+  description String?
+  type        String  @default("BOOLEAN") // "BOOLEAN" (OK/NG) or "NUMERIC" (Value)
+  minVal      Float? // For NUMERIC: Minimum acceptable value
+  maxVal      Float? // For NUMERIC: Maximum acceptable value
+  order       Int     @default(0)
+  image       String? // Path to reference image (optional override)
+
+  // pmDetails   PMRecordDetail[]
+
+  @@index([machineId])
+}
+
+model PMRecord {
+  id        Int      @id @default(autoincrement())
+  machineId Int
+  date      DateTime @default(now())
+  inspector String? // Cleaning By
+  checker   String? // Check By
+  status    String // PLANNED, COMPLETED, LATE
+  remark    String?
+
+  preventiveTypeId Int? // [NEW] Links to specific PM Type Plan
+  preventiveType   PreventiveType? @relation(fields: [preventiveTypeId], references: [id])
+
+  machine Machine          @relation(fields: [machineId], references: [id])
+  details PMRecordDetail[]
+
+  @@index([date])
+  @@index([machineId])
+  @@index([preventiveTypeId])
+  @@index([inspector])
+  @@index([status])
+}
+
+model PMRecordDetail {
+  id          Int     @id @default(autoincrement())
+  recordId    Int
+  checklistId Int?
+  topic       String? // [NEW] Snapshot of the topic name
+  isPass      Boolean @default(false)
+  value       String? // For numeric values or text input
+  remark      String?
+  subItemName String? // [NEW] Name of the sub-item (e.g., "Fixture 1")
+  image       String? @db.NVarChar(Max) // [NEW] Captured image for this checklist item
+  imageBefore String? @db.NVarChar(Max)
+  imageAfter  String? @db.NVarChar(Max)
+
+  record          PMRecord         @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  // checklist     ChecklistTemplate? @relation(fields: [checklistId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  masterChecklist MasterChecklist? @relation(fields: [checklistId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([checklistId])
+  @@index([value])
+}
+
+model UserMaster {
+  id         Int     @id @default(autoincrement())
+  employeeId String?
+  name       String
+  email      String?
+  role       String // "INSPECTOR", "CHECKER", "BOTH"
+
+  // Auth & System Role
+  username   String? // [MODIFIED] Removed @unique to allow multiple NULLs (SQL Server limitation)
+  password   String? // [NEW] Plain Text Password
+  systemRole String  @default("USER") // [NEW] "ADMIN" or "USER"
+
+  assignedMachines Machine[] // [NEW] Machines assigned to this user
+}
+
+model Area {
+  id           Int           @id @default(autoincrement())
+  name         String        @unique
+  description  String?
+  machineTypes MachineType[]
+}
+
+// Update relationships
+// PreventiveType belongs to Area
+// MachineMaster belongs to PreventiveType
+// Machine belongs to MachineMaster
