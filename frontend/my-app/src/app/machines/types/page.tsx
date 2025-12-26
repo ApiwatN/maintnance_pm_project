@@ -87,7 +87,7 @@ export default function PreventiveTypes() {
     const { isAuthenticated, loading } = useAuth(); // [FIX] loading instead of authLoading
     const [types, setTypes] = useState<MachineType[]>([]);
     const [selectedType, setSelectedType] = useState<MachineType | null>(null);
-    const [formData, setFormData] = useState({ name: "", description: "", image: "", isFixedDate: true, postponeLogic: "SHIFT" }); // [NEW] postponeLogic
+    const [formData, setFormData] = useState({ name: "", description: "", image: "", isFixedDate: true, postponeLogic: "SHIFT", emailRecipients: "", notifyAdvanceDays: 3, notifyTime: "08:00" }); // [NEW] Email Settings
     const [checklistData, setChecklistData] = useState({
         topic: "",
         type: "BOOLEAN",
@@ -196,15 +196,18 @@ export default function PreventiveTypes() {
             name: type.name,
             description: type.description,
             image: type.image || "",
-            isFixedDate: type.isFixedDate !== undefined ? type.isFixedDate : true, // [NEW]
-            postponeLogic: type.postponeLogic || "SHIFT" // [NEW]
+            isFixedDate: type.isFixedDate !== undefined ? type.isFixedDate : true,
+            postponeLogic: type.postponeLogic || "SHIFT",
+            emailRecipients: (type as any).emailRecipients || "",
+            notifyAdvanceDays: (type as any).notifyAdvanceDays !== undefined ? (type as any).notifyAdvanceDays : 3,
+            notifyTime: (type as any).notifyTime || "08:00"
         });
         const modalBtn = document.getElementById("openTypeModalBtn");
         if (modalBtn) modalBtn.click();
     };
 
     const resetForm = () => {
-        setFormData({ name: "", description: "", image: "", isFixedDate: true, postponeLogic: "SHIFT" }); // [NEW]
+        setFormData({ name: "", description: "", image: "", isFixedDate: true, postponeLogic: "SHIFT", emailRecipients: "", notifyAdvanceDays: 3, notifyTime: "08:00" });
         setEditingId(null);
     };
 
@@ -764,6 +767,26 @@ export default function PreventiveTypes() {
                             </div>
                         </div>
                     )}
+
+                    {/* [NEW] Email Notification Settings */}
+                    <div className="mb-4 border-top pt-3">
+                        <h6 className="fw-bold text-dark mb-3"><i className="bi bi-envelope-paper me-2"></i>Email Notifications</h6>
+                        <div className="mb-3">
+                            <label className="form-label fw-bold small text-muted">Recipients (Comma separated)</label>
+                            <input type="text" className="form-control" value={formData.emailRecipients} onChange={e => setFormData({ ...formData, emailRecipients: e.target.value })} placeholder="e.g. manager@example.com, staff@example.com" />
+                            <div className="form-text">Leave empty to disable email notifications for this type.</div>
+                        </div>
+                        <div className="row g-3">
+                            <div className="col-md-6">
+                                <label className="form-label fw-bold small text-muted">Advance Notice (Days)</label>
+                                <input type="number" className="form-control" value={formData.notifyAdvanceDays} onChange={e => setFormData({ ...formData, notifyAdvanceDays: parseInt(e.target.value) })} min="0" />
+                            </div>
+                            <div className="col-md-6">
+                                <label className="form-label fw-bold small text-muted">Notification Time</label>
+                                <input type="time" className="form-control" value={formData.notifyTime} onChange={e => setFormData({ ...formData, notifyTime: e.target.value })} />
+                            </div>
+                        </div>
+                    </div>
 
                     <div className="mb-4">
                         <label className="form-label fw-bold small text-muted">Reference Diagram (Image)</label>

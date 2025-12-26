@@ -64,6 +64,11 @@ model PreventiveType {
   isFixedDate   Boolean @default(true) // [NEW] True = Fixed Date (Strict), False = Floating (Based on completion)
   postponeLogic String  @default("SHIFT") // [NEW] "SHIFT" (Move future dates) or "MAINTAIN_CYCLE" (Keep original cycle)
 
+  // Email Notification Settings
+  emailRecipients   String? // Comma-separated emails
+  notifyAdvanceDays Int     @default(3) // Days before PM to notify
+  notifyTime        String  @default("08:00") // Time to notify (HH:mm)
+
   // Removed areaId as it's no longer the parent in hierarchy
 
   pmPlans          MachinePMPlan[]
