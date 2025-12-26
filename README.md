@@ -17,23 +17,23 @@ Diagram showing the system's operation and data flow.
 
 ```mermaid
 graph TD
-    User["User / Staff"] -->|Access via Web Browser| Frontend["Frontend (Next.js)"]
+    User["User Staff"] -->|Access via Web Browser| Frontend["Frontend Next.js"]
     Admin["Admin"] -->|Manage System| Frontend
 
-    subgraph "Frontend Application"
-        Frontend -->|HTTP Requests (Axios)| API["Backend API (Express.js)"]
-        Frontend -->|Real-time Updates (Socket.io)| Socket["Socket Server"]
+    subgraph FrontendApp ["Frontend Application"]
+        Frontend -->|HTTP Requests Axios| API["Backend API Express.js"]
+        Frontend -->|Real-time Updates Socket.io| Socket["Socket Server"]
     end
 
-    subgraph "Backend Server"
-        API -->|Auth & Logic| Controller["Controllers"]
+    subgraph BackendServer ["Backend Server"]
+        API -->|Auth and Logic| Controller["Controllers"]
         Socket -->|Event Handling| Controller
         Controller -->|ORM Queries| Prisma["Prisma Client"]
         Scheduler["Cron Scheduler"] -->|Trigger PM Tasks| Controller
     end
 
-    subgraph "Database"
-        Prisma -->|Read/Write| DB[("SQL Server Database")]
+    subgraph DatabaseSystem ["Database"]
+        Prisma -->|Read Write| DB[("SQL Server Database")]
     end
 
     Controller -->|File Storage| Uploads["Uploads Folder"]
