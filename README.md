@@ -1,19 +1,19 @@
 # Maintenance PM Project
 
-ระบบจัดการการซ่อมบำรุงเครื่องจักร (Machine PM System)
+Machine Preventive Maintenance System (Machine PM System)
 
-## 1. วัตถุประสงค์ (Objective)
+## 1. Objectives
 
-โครงการนี้จัดทำขึ้นเพื่อพัฒนาระบบบริหารจัดการการซ่อมบำรุงเครื่องจักร (Preventive Maintenance - PM) ภายในโรงงาน โดยมีวัตถุประสงค์หลักดังนี้:
-- เพื่อเพิ่มประสิทธิภาพในการวางแผนและติดตามการซ่อมบำรุงเครื่องจักร
-- เพื่อลดเวลา Down time ของเครื่องจักรจากการเสียฉุกเฉิน
-- เพื่อจัดเก็บประวัติการซ่อมบำรุงและการใช้งานเครื่องจักรอย่างเป็นระบบ
-- เพื่อให้ผู้บริหารและเจ้าหน้าที่สามารถดูสถานะของเครื่องจักรได้แบบ Real-time ผ่าน Dashboard
-- เพื่ออำนวยความสะดวกในการออกรายงานและวิเคราะห์ข้อมูลการซ่อมบำรุง
+This project aims to develop a Preventive Maintenance (PM) management system for factory machinery. The main objectives are:
+- To enhance the efficiency of machinery maintenance planning and tracking.
+- To reduce machine downtime caused by unexpected breakdowns.
+- To systematically store maintenance history and machine usage records.
+- To enable management and staff to view machine status in real-time via a Dashboard.
+- To facilitate the generation of maintenance reports and data analysis.
 
-## 2. Flow Chart
+## 2. System Architecture (Flow Chart)
 
-แผนภาพแสดงการทำงานของระบบ (System Architecture & Data Flow)
+Diagram showing the system's operation and data flow.
 
 ```mermaid
 graph TD
@@ -39,82 +39,82 @@ graph TD
     Controller -->|File Storage| Uploads[Uploads Folder]
 ```
 
-## 3. Feature (คุณสมบัติของระบบ)
+## 3. Features
 
-ระบบประกอบด้วยฟังก์ชันหลักดังนี้:
+The system consists of the following main functions:
 
 ### 3.1 Dashboard
-- แสดงภาพรวมสถานะของเครื่องจักรทั้งหมด
-- กราฟแสดงผลการดำเนินงานและแผน PM
-- การแจ้งเตือนงานซ่อมบำรุงที่ถึงกำหนด
+- Overview of all machine statuses.
+- Graphs displaying operational performance and PM plans.
+- Notifications for upcoming maintenance tasks.
 
-### 3.2 Machine Management (จัดการเครื่องจักร)
-- ทะเบียนเครื่องจักร (Machine Master)
-- จัดการประเภทเครื่องจักร (Machine Types)
-- ติดตามสถานะการทำงานของเครื่องจักร
+### 3.2 Machine Management
+- Machine Master registry.
+- Management of Machine Types.
+- Tracking of machine operational status.
 
 ### 3.3 Preventive Maintenance (PM)
-- วางแผนการซ่อมบำรุง (PM Planning)
-- บันทึกผลการซ่อมบำรุง (PM Recording)
-- จัดการประเภทการซ่อมบำรุง (Preventive Types)
-- ระบบแจ้งเตือนเมื่อถึงรอบ PM
+- PM Planning.
+- PM Result Recording.
+- Management of Preventive Types.
+- Notification system for scheduled PM cycles.
 
-### 3.4 User Management (จัดการผู้ใช้งาน)
-- ระบบจัดการผู้ใช้งานและสิทธิ์การเข้าถึง (User Master)
-- ระบบ Login/Authentication
+### 3.4 User Management
+- User Master and access rights management.
+- Login/Authentication system.
 
-### 3.5 Reports (รายงาน)
-- ออกรายงานประวัติการซ่อมบำรุง
-- Export ข้อมูลเป็น Excel/PDF
+### 3.5 Reports
+- Maintenance history reports.
+- Data export to Excel/PDF.
 
 ### 3.6 Real-time Features
-- อัปเดตสถานะเครื่องจักรแบบ Real-time ด้วย Socket.io
+- Real-time machine status updates using Socket.io.
 
-## 4. วิธีการใช้งาน (Usage)
+## 4. Usage
 
-### Prerequisites (สิ่งที่ต้องมี)
+### Prerequisites
 - Node.js (v18 or higher recommended)
 - SQL Server
 - Git
 
-### 4.1 การติดตั้งและรัน Backend
+### 4.1 Backend Installation & Setup
 
-1. เข้าไปที่โฟลเดอร์ backend
+1. Navigate to the backend folder:
    ```bash
    cd backend
    ```
-2. ติดตั้ง dependencies
+2. Install dependencies:
    ```bash
    npm install
    ```
-3. ตั้งค่า Database และ Environment Variables ในไฟล์ `.env`
-4. รัน Server
+3. Configure Database and Environment Variables in the `.env` file.
+4. Start the Server:
    ```bash
    npm start
    ```
-   Server จะทำงานที่ Port ที่กำหนด (Default: 5003)
+   The server will run on the specified port (Default: 5003).
 
-### 4.2 การติดตั้งและรัน Frontend
+### 4.2 Frontend Installation & Setup
 
-1. เข้าไปที่โฟลเดอร์ frontend
+1. Navigate to the frontend folder:
    ```bash
    cd frontend/my-app
    ```
-2. ติดตั้ง dependencies
+2. Install dependencies:
    ```bash
    npm install
    ```
-3. รันโหมด Development
+3. Run in Development mode:
    ```bash
    npm run dev
    ```
-   หรือรันโหมด Production
+   Or build and run in Production mode:
    ```bash
    npm run build
    npm start
    ```
-4. เปิด Browser ไปที่ `http://localhost:3000` (หรือ Port ที่กำหนด)
+4. Open your browser and go to `http://localhost:3000` (or the configured port).
 
-### 4.3 โครงสร้างโปรเจกต์
-- **backend/**: Source code ส่วน Server API, Database connection, Scheduler
-- **frontend/my-app/**: Source code ส่วนหน้าเว็บ (Next.js), Components, Pages
+### 4.3 Project Structure
+- **backend/**: Source code for Server API, Database connection, Scheduler.
+- **frontend/my-app/**: Source code for the Web Interface (Next.js), Components, Pages.
