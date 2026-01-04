@@ -187,6 +187,9 @@ model UserMaster {
   password   String? // [NEW] Plain Text Password
   systemRole String  @default("USER") // [NEW] "ADMIN" or "USER"
 
+  // Permission Type for PM Actions (only applies when systemRole = "USER")
+  permissionType String @default("PM_ONLY") // "PM_ONLY", "RESCHEDULE_ONLY", "PM_AND_RESCHEDULE"
+
   assignedMachines Machine[] // [NEW] Machines assigned to this user
 }
 

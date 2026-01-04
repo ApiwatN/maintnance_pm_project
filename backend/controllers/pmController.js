@@ -208,6 +208,7 @@ exports.recordPM = async (req, res) => {
         const allDetails = [...details];
 
         // [NEW] Convert subItemDetails object to array format
+        console.log('[DEBUG] subItemDetails received:', JSON.stringify(req.body.subItemDetails, null, 2));
         if (req.body.subItemDetails) {
             const subItemDetailsObj = req.body.subItemDetails;
             for (const key in subItemDetailsObj) {
@@ -461,11 +462,15 @@ exports.getDashboardStats = async (req, res) => {
     }
 };
 
-// Get PM History for specific machine
+// Get PM History for specific machine (with server-side pagination)
 exports.getMachineHistory = async (req, res) => {
     try {
         const { machineId } = req.params;
-        const { year } = req.query;
+        const { year, page = 1, limit = 10, pmTypeId } = req.query;
+
+        const pageNum = parseInt(page) || 1;
+        const limitNum = parseInt(limit) || 10;
+        const skip = (pageNum - 1) * limitNum;
 
         const where = {};
 
@@ -502,6 +507,15 @@ exports.getMachineHistory = async (req, res) => {
             };
         }
 
+        // Filter by PM Type if provided
+        if (pmTypeId && pmTypeId !== 'all') {
+            where.preventiveTypeId = parseInt(pmTypeId);
+        }
+
+        // Get total count for pagination
+        const total = await prisma.pMRecord.count({ where });
+
+        // Get paginated records
         const records = await prisma.pMRecord.findMany({
             where,
             include: {
@@ -519,10 +533,21 @@ exports.getMachineHistory = async (req, res) => {
             },
             orderBy: {
                 date: 'desc'
-            }
+            },
+            skip,
+            take: limitNum
         });
 
-        res.json(records);
+        // Return paginated response with metadata
+        res.json({
+            data: records,
+            pagination: {
+                total,
+                page: pageNum,
+                limit: limitNum,
+                totalPages: Math.ceil(total / limitNum)
+            }
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -532,7 +557,7 @@ exports.getMachineHistory = async (req, res) => {
 exports.updateRecord = async (req, res) => {
     try {
         const { id } = req.params;
-        const { inspector, checker, status, remark, details } = req.body;
+        const { inspector, checker, status, remark, details, subItemDetails } = req.body;
 
         // [RBAC] Verify access to record's machine
         if (req.user && req.user.systemRole !== 'ADMIN') {
@@ -562,8 +587,37 @@ exports.updateRecord = async (req, res) => {
                 checker,
                 status,
                 remark
+            },
+            select: {
+                id: true,
+                machineId: true,
+                preventiveTypeId: true,
+                inspector: true,
+                checker: true,
+                status: true,
+                remark: true
             }
         });
+
+        // [FIX] Combine standard details with subItemDetails (same as recordPM)
+        const allDetails = [...details];
+
+        if (subItemDetails) {
+            console.log('[DEBUG] updateRecord subItemDetails received:', JSON.stringify(subItemDetails, null, 2));
+            for (const key in subItemDetails) {
+                const sub = subItemDetails[key];
+                if (sub.checklistId && sub.subItemName !== undefined) {
+                    allDetails.push({
+                        checklistId: sub.checklistId,
+                        topic: `${sub.topic || ''} : ${sub.subItemName}`,
+                        isPass: sub.isPass || false,
+                        value: sub.value || null,
+                        remark: sub.remark || null,
+                        subItemName: sub.subItemName
+                    });
+                }
+            }
+        }
 
         // Delete old details and create new ones
         await prisma.pMRecordDetail.deleteMany({
@@ -571,15 +625,36 @@ exports.updateRecord = async (req, res) => {
         });
 
         await prisma.pMRecordDetail.createMany({
-            data: details.map(d => ({
+            data: allDetails.map(d => ({
                 recordId: parseInt(id),
                 checklistId: d.checklistId,
+                topic: d.topic || null,
                 isPass: d.isPass,
                 value: d.value || null,
                 remark: d.remark || null,
-                image: d.image || null
+                image: d.image || null,
+                imageBefore: d.imageBefore || null,
+                imageAfter: d.imageAfter || null,
+                subItemName: d.subItemName || null
             }))
         });
+
+        // [FIX] Update MachinePMPlan.lastCheckStatus to sync with Dashboard
+        const hasNG = allDetails.some(d => !d.isPass);
+        const newLastCheckStatus = hasNG ? 'HAS_NG' : 'ALL_OK';
+
+        // Find and update the PM Plan for this machine and preventive type
+        if (record.preventiveTypeId) {
+            await prisma.machinePMPlan.updateMany({
+                where: {
+                    machineId: record.machineId,
+                    preventiveTypeId: record.preventiveTypeId
+                },
+                data: {
+                    lastCheckStatus: newLastCheckStatus
+                }
+            });
+        }
 
         if (req.io) {
             req.io.emit('pm_update', { action: 'update', recordId: id, machineId: record.machineId });
@@ -591,6 +666,7 @@ exports.updateRecord = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
+
 
 // Machine Analysis
 exports.getMachineAnalysis = async (req, res) => {
@@ -938,6 +1014,79 @@ exports.getMachineStatusOverview = async (req, res) => {
         });
 
         res.json(statusList);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+// Reschedule PM Date
+exports.reschedulePM = async (req, res) => {
+    try {
+        const { machineId, preventiveTypeId, newDate } = req.body;
+
+        if (!machineId || !preventiveTypeId || !newDate) {
+            return res.status(400).json({ error: 'machineId, preventiveTypeId และ newDate จำเป็นต้องระบุ' });
+        }
+
+        // [RBAC] Check permission
+        if (req.user && req.user.systemRole !== 'ADMIN') {
+            const user = await prisma.userMaster.findUnique({
+                where: { id: req.user.id },
+                include: { assignedMachines: { select: { id: true } } }
+            });
+
+            // Check if user has reschedule permission
+            if (user.permissionType === 'PM_ONLY') {
+                return res.status(403).json({ error: 'คุณไม่มีสิทธิ์เลื่อนวัน PM' });
+            }
+
+            // Check if machine is assigned to user
+            const assignedIds = user?.assignedMachines.map(m => m.id) || [];
+            if (!assignedIds.includes(parseInt(machineId))) {
+                return res.status(403).json({ error: 'คุณไม่มีสิทธิ์เข้าถึงเครื่องนี้' });
+            }
+        }
+
+        // Find and update the PM plan
+        const plan = await prisma.machinePMPlan.findUnique({
+            where: {
+                machineId_preventiveTypeId: {
+                    machineId: parseInt(machineId),
+                    preventiveTypeId: parseInt(preventiveTypeId)
+                }
+            },
+            include: {
+                machine: true,
+                preventiveType: true
+            }
+        });
+
+        if (!plan) {
+            return res.status(404).json({ error: 'ไม่พบแผน PM สำหรับเครื่องและประเภทที่ระบุ' });
+        }
+
+        // Update next PM date
+        const updatedPlan = await prisma.machinePMPlan.update({
+            where: { id: plan.id },
+            data: {
+                nextPMDate: new Date(newDate)
+            },
+            include: {
+                machine: true,
+                preventiveType: true
+            }
+        });
+
+        // Emit socket event
+        if (req.io) {
+            req.io.emit('pm_update', { action: 'reschedule', machineId, preventiveTypeId });
+            req.io.emit('dashboard_update');
+        }
+
+        res.json({
+            message: 'เลื่อนวัน PM สำเร็จ',
+            plan: updatedPlan
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

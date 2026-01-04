@@ -17,6 +17,7 @@ interface User {
     username?: string;
     password?: string;
     systemRole: string;
+    permissionType?: string;
     assignedMachines?: { id: number; name: string; code: string }[];
 }
 
@@ -46,6 +47,7 @@ export default function UserMasterPage() {
         username: "",
         password: "",
         systemRole: "USER",
+        permissionType: "PM_ONLY",
         assignedMachineIds: [] as string[]
     });
     const [editingId, setEditingId] = useState<number | null>(null);
@@ -145,6 +147,7 @@ export default function UserMasterPage() {
             username: user.username || "",
             password: user.password || "", // Show password as plain text
             systemRole: user.systemRole || "USER",
+            permissionType: user.permissionType || "PM_ONLY",
             assignedMachineIds: user.assignedMachines?.map(m => m.id.toString()) || []
         });
     };
@@ -186,6 +189,7 @@ export default function UserMasterPage() {
             username: "",
             password: "",
             systemRole: "USER",
+            permissionType: "PM_ONLY",
             assignedMachineIds: []
         });
     };
@@ -352,6 +356,20 @@ export default function UserMasterPage() {
                                                 </select>
                                             </div>
                                         </div>
+
+                                        {formData.systemRole === 'USER' && (
+                                            <div className="row g-3 mb-4">
+                                                <div className="col-md-6">
+                                                    <label className="form-label fw-bold small text-muted">Permission Type</label>
+                                                    <select className="form-select" name="permissionType" value={formData.permissionType} onChange={handleInputChange}>
+                                                        <option value="PM_ONLY">ทำ PM อย่างเดียว</option>
+                                                        <option value="RESCHEDULE_ONLY">เลื่อนวัน PM อย่างเดียว</option>
+                                                        <option value="PM_AND_RESCHEDULE">ทั้งทำ PM และเลื่อนวัน</option>
+                                                    </select>
+                                                    <small className="text-muted" style={{ fontSize: '0.7rem' }}>กำหนดว่า User สามารถทำอะไรกับเครื่องที่ assigned ได้</small>
+                                                </div>
+                                            </div>
+                                        )}
                                     </>
                                 )}
 

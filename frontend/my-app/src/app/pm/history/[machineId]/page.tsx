@@ -92,7 +92,6 @@ export default function PMHistoryPage() {
     const { loading: authLoading } = useAuth();
 
     const [records, setRecords] = useState<PMRecord[]>([]);
-    const [filteredRecords, setFilteredRecords] = useState<PMRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
     const [selectedPMType, setSelectedPMType] = useState("");
@@ -117,8 +116,9 @@ export default function PMHistoryPage() {
     const [machineTypes, setMachineTypes] = useState<any[]>([]);
     const [allMachines, setAllMachines] = useState<MachineOption[]>([]);
 
-    // Pagination
+    // Pagination (server-side)
     const [currentPage, setCurrentPage] = useState(1);
+    const [totalItems, setTotalItems] = useState(0);
     const itemsPerPage = 10;
 
     // Generate year options (current year ± 5 years)
@@ -171,9 +171,9 @@ export default function PMHistoryPage() {
 
     useEffect(() => {
         if (authLoading) return;
-        // Fetch even if empty (All machines)
+        // Fetch when machine, year, PM type, or page changes
         fetchHistory();
-    }, [selectedMachineId, selectedYear, authLoading]);
+    }, [selectedMachineId, selectedYear, selectedPMType, currentPage, authLoading]);
 
     // Socket Listener
     useEffect(() => {
@@ -187,8 +187,8 @@ export default function PMHistoryPage() {
     }, [socket, selectedMachineId, selectedYear]);
 
     useEffect(() => {
-        filterRecords();
-    }, [records, selectedPMType]);
+        processRecords();
+    }, [records]);
 
     // Load filters from localStorage
     useEffect(() => {
@@ -233,9 +233,19 @@ export default function PMHistoryPage() {
 
         const targetId = selectedMachineId || 'all';
 
+        // Build query params including pagination
+        const params = new URLSearchParams({
+            year: selectedYear,
+            page: currentPage.toString(),
+            limit: itemsPerPage.toString()
+        });
+        if (selectedPMType) {
+            params.append('pmTypeId', selectedPMType);
+        }
+
         // Fetch both: history records AND machine details (only if specific machine)
         const requests = [
-            axios.get(`${config.apiServer}/api/pm/machine/${targetId}/history?year=${selectedYear}`)
+            axios.get(`${config.apiServer}/api/pm/machine/${targetId}/history?${params.toString()}`)
         ];
 
         if (selectedMachineId && selectedMachineId !== 'all') {
@@ -253,10 +263,20 @@ export default function PMHistoryPage() {
 
         Promise.all(requests)
             .then(([historyRes, machineRes]) => {
-                const records = historyRes.data;
+                // Handle paginated response from server
+                const response = historyRes.data;
+                const paginatedRecords = response.data || response; // Support both new and old format
+                const pagination = response.pagination;
                 const machine = machineRes.data;
 
-                setRecords(records);
+                setRecords(paginatedRecords);
+                if (pagination) {
+                    setTotalItems(pagination.total);
+                } else {
+                    // Fallback for old format (array directly)
+                    setTotalItems(Array.isArray(response) ? response.length : 0);
+                }
+
                 if (machine) {
                     setSelectedMachineName(machine.name);
                 } else if (!selectedMachineId) {
@@ -272,7 +292,7 @@ export default function PMHistoryPage() {
                 // Also extract from records as fallback for legacy data
                 const recordTypes = Array.from(
                     new Map(
-                        records
+                        paginatedRecords
                             .filter((r: PMRecord) => r.preventiveType)
                             .map((r: PMRecord) => [
                                 r.preventiveType!.id,
@@ -290,9 +310,9 @@ export default function PMHistoryPage() {
 
                 setPMTypes(types as { id: number; name: string }[]);
 
-                // Prioritize typeId from URL, otherwise use first type
+                // Prioritize typeId from URL, otherwise use first type (only on first load)
                 const urlTypeId = searchParams.get('typeId');
-                if (urlTypeId && types.some((t: any) => t.id === parseInt(urlTypeId))) {
+                if (urlTypeId && types.some((t: any) => t.id === parseInt(urlTypeId)) && !selectedPMType) {
                     setSelectedPMType(urlTypeId);
                 } else if (types.length > 0 && !selectedPMType) {
                     setSelectedPMType((types as any[])[0].id.toString());
@@ -330,13 +350,25 @@ export default function PMHistoryPage() {
         return { min, max };
     };
 
-    const filterRecords = () => {
-        let filtered = records;
+    // Process records to extract column headers (no filtering - server already filtered)
+    const processRecords = () => {
+        // Use records directly (already filtered by server)
 
-        // Filter by PM Type
-        if (selectedPMType) {
-            filtered = filtered.filter(r => r.preventiveType?.id === parseInt(selectedPMType));
-        }
+        // [NEW] First, identify all topics that have subItems (to exclude from main columns)
+        const topicsWithSubItems = new Set<string>();
+        records.forEach(record => {
+            const masterChecklists = record.preventiveType?.masterChecklists || [];
+            masterChecklists.forEach((mc: any) => {
+                if (mc.options) {
+                    try {
+                        const opts = JSON.parse(mc.options);
+                        if (opts.subItems && Array.isArray(opts.subItems) && opts.subItems.length > 0) {
+                            topicsWithSubItems.add(mc.topic);
+                        }
+                    } catch { /* ignore parse errors */ }
+                }
+            });
+        });
 
         // Separate topics into Checklists (BOOLEAN, NUMERIC), Images (IMAGE), and More Details (TEXT, DROPDOWN)
         // [FIX] Include order field for sorting
@@ -345,12 +377,17 @@ export default function PMHistoryPage() {
         const detailsMap = new Map<string, { name: string, display: string, type: string, order: number }>();
 
         // Collect from Details
-        filtered.forEach(record => {
+        records.forEach(record => {
             record.details.forEach(detail => {
                 const topicName = detail.masterChecklist?.topic || detail.topic;
                 const type = detail.masterChecklist?.type || detail.checklist?.type || 'BOOLEAN';
                 const master = detail.masterChecklist || detail.checklist;
                 const order = (master as any)?.order ?? 9999; // Default high order for items without order
+
+                // [FIX] Skip topics that have subItems (they will be shown as sub-item columns instead)
+                if (topicName && topicsWithSubItems.has(topicName)) {
+                    return; // Skip this topic - it has subItems
+                }
 
                 if (topicName) {
                     let displayName = topicName;
@@ -393,7 +430,7 @@ export default function PMHistoryPage() {
         const detailSubItemsMap = new Map<string, { name: string, display: string, type: string, parentTopic: string, order: number }>();
 
         // First, collect from preventiveType.masterChecklists (configuration)
-        filtered.forEach(record => {
+        records.forEach(record => {
             const masterChecklists = record.preventiveType?.masterChecklists || [];
             masterChecklists.forEach((mc: any) => {
                 if (mc.options) {
@@ -428,7 +465,7 @@ export default function PMHistoryPage() {
         });
 
         // Also collect from record.details for legacy records
-        filtered.forEach(record => {
+        records.forEach(record => {
             record.details.forEach((detail: any) => {
                 if (detail.subItemName) {
                     const baseTopic = detail.topic?.split(' : ')[0] || detail.masterChecklist?.topic || 'Unknown';
@@ -467,40 +504,28 @@ export default function PMHistoryPage() {
             ...Array.from(detailSubItemsMap.values()).sort((a, b) => a.order - b.order),
             ...Array.from(checklistSubItemsMap.values()).sort((a, b) => a.order - b.order)
         ]);
-
-        setFilteredRecords(filtered);
-        setCurrentPage(1);
     };
 
-    const getValue = (record: PMRecord, topic: string) => {
-        // [NEW] Check if topic contains " : " which indicates a Sub-Item format
-        const isSubItemSearch = topic.includes(' : ');
+    const getValue = (record: PMRecord, topic: string, isActualSubItem: boolean = false) => {
+        // isActualSubItem indicates if this topic comes from subItemTopics array (true sub-items with subItemName in DB)
 
         const detail = record.details.find((d: any) => {
             const resolvedTopic = d.masterChecklist?.topic || d.topic;
 
-            if (isSubItemSearch) {
-                // For Sub-Item: match "baseTopic : subItemName" format
+            if (isActualSubItem) {
+                // For actual Sub-Item (from subItemTopics): match "baseTopic : subItemName" format
                 const [baseTopic, subItemName] = topic.split(' : ');
                 const detailBaseTopic = resolvedTopic?.split(' : ')[0] || resolvedTopic;
 
-                // DEBUG: Log sub-item matching
-                if (d.subItemName) {
-                    console.log('SubItem Search:', {
-                        searchTopic: topic,
-                        baseTopic,
-                        subItemName,
-                        detailTopic: d.topic,
-                        detailSubItemName: d.subItemName,
-                        resolvedTopic,
-                        detailBaseTopic,
-                        match: (detailBaseTopic === baseTopic || resolvedTopic === baseTopic) && d.subItemName === subItemName
-                    });
-                }
-
-                return (detailBaseTopic === baseTopic || resolvedTopic === baseTopic) && d.subItemName === subItemName;
+                // Must have subItemName in detail for it to be a sub-item match
+                return d.subItemName &&
+                    (detailBaseTopic === baseTopic || resolvedTopic === baseTopic) &&
+                    d.subItemName === subItemName;
             }
-            return resolvedTopic === topic;
+
+            // For regular topics (including those with " : " in name like "Check Gap Argon Cover Fixture : 1")
+            // Match by exact topic name and ensure it's NOT a sub-item detail
+            return resolvedTopic === topic && !d.subItemName;
         });
 
         if (!detail) return '-';
@@ -525,20 +550,22 @@ export default function PMHistoryPage() {
         }
     };
 
-    const getDisplayValue = (record: PMRecord, topic: string) => {
-        // [NEW] Check if topic contains " : " which indicates a Sub-Item format
-        const isSubItemSearch = topic.includes(' : ');
+    const getDisplayValue = (record: PMRecord, topic: string, isActualSubItem: boolean = false) => {
+        // isActualSubItem indicates if this topic comes from subItemTopics array
 
         const detail = record.details.find((d: any) => {
             const resolvedTopic = d.masterChecklist?.topic || d.topic;
 
-            if (isSubItemSearch) {
-                // For Sub-Item: match "baseTopic : subItemName" format
+            if (isActualSubItem) {
+                // For actual Sub-Item: match "baseTopic : subItemName" format
                 const [baseTopic, subItemName] = topic.split(' : ');
                 const detailBaseTopic = resolvedTopic?.split(' : ')[0] || resolvedTopic;
-                return (detailBaseTopic === baseTopic || resolvedTopic === baseTopic) && d.subItemName === subItemName;
+                return d.subItemName &&
+                    (detailBaseTopic === baseTopic || resolvedTopic === baseTopic) &&
+                    d.subItemName === subItemName;
             }
-            return resolvedTopic === topic;
+            // For regular topics: match exact topic and ensure NOT a sub-item detail
+            return resolvedTopic === topic && !d.subItemName;
         });
 
         if (!detail) return '-';
@@ -635,20 +662,22 @@ export default function PMHistoryPage() {
         }
     };
 
-    const getStatusColor = (record: PMRecord, topic: string) => {
-        // [NEW] Check if topic contains " : " which indicates a Sub-Item format
-        const isSubItemSearch = topic.includes(' : ');
+    const getStatusColor = (record: PMRecord, topic: string, isActualSubItem: boolean = false) => {
+        // isActualSubItem indicates if this topic comes from subItemTopics array
 
         const detail = record.details.find((d: any) => {
             const resolvedTopic = d.masterChecklist?.topic || d.topic;
 
-            if (isSubItemSearch) {
-                // For Sub-Item: match "baseTopic : subItemName" format
+            if (isActualSubItem) {
+                // For actual Sub-Item: match "baseTopic : subItemName" format
                 const [baseTopic, subItemName] = topic.split(' : ');
                 const detailBaseTopic = resolvedTopic?.split(' : ')[0] || resolvedTopic;
-                return (detailBaseTopic === baseTopic || resolvedTopic === baseTopic) && d.subItemName === subItemName;
+                return d.subItemName &&
+                    (detailBaseTopic === baseTopic || resolvedTopic === baseTopic) &&
+                    d.subItemName === subItemName;
             }
-            return resolvedTopic === topic;
+            // For regular topics: match exact topic and ensure NOT a sub-item detail
+            return resolvedTopic === topic && !d.subItemName;
         });
 
         if (!detail) return '';
@@ -708,13 +737,96 @@ export default function PMHistoryPage() {
     // Combine all topics for export (including Sub-Items)
     const allTopics = [...imageTopics, ...checklistTopics, ...moreDetailTopics, ...subItemTopics];
 
-    const exportToExcel = () => {
+    const fetchAllHistory = async () => {
+        const targetId = selectedMachineId || 'all';
+        const params = new URLSearchParams({
+            year: selectedYear,
+            page: '1',
+            limit: '100000' // Fetch all (large limit)
+        });
+        if (selectedPMType) {
+            params.append('pmTypeId', selectedPMType);
+        }
+
+        try {
+            const response = await axios.get(`${config.apiServer}/api/pm/machine/${targetId}/history?${params.toString()}`);
+            let data = response.data.data || response.data; // Support both formats
+
+            // [FIX] Client-side filter for Area and Type using allMachines lookup
+            if (selectedArea) {
+                data = data.filter((r: PMRecord) => {
+                    const machine = allMachines.find(m => m.id === r.machine.id);
+                    return machine?.machineMaster?.machineType?.area?.name === selectedArea;
+                });
+            }
+            if (selectedType) {
+                data = data.filter((r: PMRecord) => {
+                    const machine = allMachines.find(m => m.id === r.machine.id);
+                    return machine?.machineMaster?.machineType?.name === selectedType;
+                });
+            }
+
+            return data;
+        } catch (error) {
+            console.error("Error fetching all history:", error);
+            Swal.fire("Error", "Failed to fetch all data for export", "error");
+            return [];
+        }
+    };
+
+    const handleExportExcel = async (type: 'page' | 'all') => {
+        if (type === 'page') {
+            exportToExcel(records);
+        } else {
+            // Show loading
+            Swal.fire({
+                title: 'Preparing Export...',
+                text: 'Fetching all records, please wait.',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+            const allRecords = await fetchAllHistory();
+            Swal.close();
+            if (allRecords.length > 0) {
+                exportToExcel(allRecords);
+            } else {
+                Swal.fire("Info", "No records found to export", "info");
+            }
+        }
+    };
+
+    const handleExportPDF = async (type: 'page' | 'all') => {
+        if (type === 'page') {
+            exportToPDF(records);
+        } else {
+            // Show loading
+            Swal.fire({
+                title: 'Preparing Export...',
+                text: 'Fetching all records, please wait.',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+            const allRecords = await fetchAllHistory();
+            Swal.close();
+            if (allRecords.length > 0) {
+                exportToPDF(allRecords);
+            } else {
+                Swal.fire("Info", "No records found to export", "info");
+            }
+        }
+    };
+
+    const exportToExcel = (recordsToExport: PMRecord[]) => {
         const pmTypeName = pmTypes.find(t => t.id === parseInt(selectedPMType))?.name || 'All';
         const areaLabel = selectedArea || 'AllAreas';
         const typeLabel = selectedType || 'AllTypes';
         const machineLabel = selectedMachineName || 'AllMachines';
 
-        const data = filteredRecords.map((record, index) => {
+        const data = recordsToExport.map((record, index) => {
             const row: any = {
                 'No': index + 1,
                 'Date': new Date(record.date).toLocaleDateString('th-TH'),
@@ -737,59 +849,179 @@ export default function PMHistoryPage() {
         });
 
         const ws = XLSX.utils.json_to_sheet(data);
+
+        // [FIX] Set column widths
+        const columnWidths: { wch: number }[] = [
+            { wch: 5 },   // No
+            { wch: 12 },  // Date
+            { wch: 8 },   // Time
+            { wch: 15 },  // Machine
+            { wch: 10 },  // Code
+            { wch: 15 },  // Inspector
+            { wch: 15 },  // Checker
+            { wch: 15 },  // Status
+        ];
+
+        // Add widths for topic columns
+        allTopics.forEach(topic => {
+            // Wider for sub-items (contain " : "), narrower for simple OK/NG
+            const width = topic.display.includes(' : ') ? 18 : 12;
+            columnWidths.push({ wch: width });
+        });
+
+        // Remark column
+        columnWidths.push({ wch: 20 });
+
+        ws['!cols'] = columnWidths;
+
+        // [FIX] Apply center alignment and header styling
+        const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+        for (let R = range.s.r; R <= range.e.r; R++) {
+            for (let C = range.s.c; C <= range.e.c; C++) {
+                const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+                if (!ws[cellAddress]) continue;
+
+                // Create cell style object
+                if (!ws[cellAddress].s) ws[cellAddress].s = {};
+
+                // Center align all cells
+                ws[cellAddress].s.alignment = { horizontal: 'center', vertical: 'center' };
+
+                // Header row styling (first row)
+                if (R === 0) {
+                    ws[cellAddress].s.font = { bold: true };
+                    ws[cellAddress].s.fill = { fgColor: { rgb: '0D6EFD' }, patternType: 'solid' };
+                    ws[cellAddress].s.font = { bold: true, color: { rgb: 'FFFFFF' } };
+                }
+            }
+        }
+
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'PM History');
         XLSX.writeFile(wb, `PM_History_${areaLabel}_${typeLabel}_${machineLabel}_${pmTypeName}_${selectedYear}.xlsx`);
     };
 
-    const exportToPDF = () => {
+    const exportToPDF = (recordsToExport: PMRecord[]) => {
         const pmTypeName = pmTypes.find(t => t.id === parseInt(selectedPMType))?.name || 'All';
         const areaLabel = selectedArea || 'All Areas';
         const typeLabel = selectedType || 'All Types';
         const machineLabel = selectedMachineName || 'All Machines';
         const doc = new jsPDF('l', 'mm', 'a4');
 
-        doc.setFontSize(16);
-        doc.text(`PM History - ${machineLabel} (${pmTypeName})`, 14, 15);
-        doc.setFontSize(10);
-        doc.text(`Area: ${areaLabel} | Type: ${typeLabel} | Year: ${selectedYear}`, 14, 22);
+        doc.setFontSize(14);
+        doc.text(`PM History - ${machineLabel} (${pmTypeName})`, 14, 10);
+        doc.setFontSize(9);
+        doc.text(`Area: ${areaLabel} | Type: ${typeLabel} | Year: ${selectedYear}`, 14, 16);
 
-        const headers = [
-            'No', 'Date', 'Time', 'Machine', 'Inspector', 'Checker', 'Status',
-            ...allTopics.map(t => t.display),
-            'Remark'
-        ];
+        // Define fixed columns (No, Date, Time, Machine, Inspector, Checker, Status)
+        const fixedHeaders = ['No', 'Date', 'Time', 'Machine', 'Inspector', 'Checker', 'Status'];
+        const topicHeaders = allTopics.map(t => t.display);
+        const headers = [...fixedHeaders, ...topicHeaders, 'Remark'];
 
-        const data = filteredRecords.map((record, index) => [
+        // Number of fixed columns (headers that should stay horizontal)
+        const fixedColCount = fixedHeaders.length;
+        const remarkColIndex = headers.length - 1;
+
+        const data = recordsToExport.map((record, index) => [
             index + 1,
             new Date(record.date).toLocaleDateString('th-TH'),
             new Date(record.date).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
             record.machine.name,
             record.inspector,
             record.checker,
-            getRecordStatus(record), // Use calculated status
-            ...allTopics.map(topic => getValue(record, topic.name)),
+            getRecordStatus(record),
+            ...allTopics.map(topic => {
+                const isActualSubItem = subItemTopics.some(st => st.name === topic.name);
+                return getValue(record, topic.name, isActualSubItem);
+            }),
             record.remark || '-'
         ]);
 
+        // Calculate appropriate font size based on number of columns
+        const totalColumns = headers.length;
+        let fontSize = 6;
+        if (totalColumns <= 15) fontSize = 7;
+        if (totalColumns <= 12) fontSize = 8;
+        if (totalColumns > 20) fontSize = 5;
+        if (totalColumns > 25) fontSize = 4;
+
+        // Height for vertical headers
+        const verticalHeaderHeight = 35;
+
         autoTable(doc, {
-            head: [headers],
+            head: [headers.map((h, i) => (i >= fixedColCount && i < remarkColIndex) ? '' : h)], // Empty for vertical headers
             body: data,
-            startY: 28,
-            styles: { fontSize: 8 },
-            headStyles: { fillColor: [13, 110, 253] },
-            columnStyles: {
-                0: { cellWidth: 10 },
+            startY: 20,
+            theme: 'grid',
+            styles: {
+                fontSize: fontSize,
+                cellPadding: 1,
+                valign: 'middle',
+                halign: 'center',
+                overflow: 'linebreak',
+                lineWidth: 0.1
             },
+            headStyles: {
+                fillColor: [13, 110, 253],
+                textColor: [255, 255, 255],
+                fontStyle: 'bold',
+                halign: 'center',
+                valign: 'bottom',
+                fontSize: fontSize,
+                cellPadding: 1,
+                minCellHeight: verticalHeaderHeight
+            },
+            alternateRowStyles: {
+                fillColor: [248, 249, 250]
+            },
+            margin: { left: 5, right: 5, top: 20 },
+            tableWidth: 'wrap',
+            showHead: 'everyPage',
+            didDrawCell: function (data) {
+                // Draw vertical text for topic headers (columns 7 to n-1)
+                if (data.section === 'head' && data.column.index >= fixedColCount && data.column.index < remarkColIndex) {
+                    const headerText = headers[data.column.index];
+                    const cell = data.cell;
+
+                    // Save graphics state
+                    doc.saveGraphicsState();
+
+                    // Set text properties
+                    doc.setFontSize(fontSize);
+                    doc.setTextColor(255, 255, 255);
+
+                    // Calculate position for rotated text
+                    const x = cell.x + cell.width / 2 + 1;
+                    const y = cell.y + cell.height - 2;
+
+                    // Rotate and draw text
+                    doc.text(headerText, x, y, {
+                        angle: 90,
+                        align: 'left'
+                    });
+
+                    // Restore graphics state
+                    doc.restoreGraphicsState();
+                }
+            },
+            didParseCell: function (data) {
+                // Make Remark column left-aligned
+                if (data.column.index === remarkColIndex) {
+                    data.cell.styles.halign = 'left';
+                }
+                // Narrower width for topic columns
+                if (data.column.index >= fixedColCount && data.column.index < remarkColIndex) {
+                    data.cell.styles.cellWidth = 8;
+                }
+            }
         });
 
         doc.save(`PM_History_${areaLabel}_${typeLabel}_${machineLabel}_${pmTypeName}_${selectedYear}.pdf`);
     };
 
     // Pagination
-    const indexOfLastItem = currentPage * itemsPerPage;
-    const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-    const currentItems = filteredRecords.slice(indexOfFirstItem, indexOfLastItem);
+    // Server-side pagination: records already contains only the items for the current page
+    const currentItems = records;
 
     const handlePageChange = (page: number) => {
         setCurrentPage(page);
@@ -817,7 +1049,8 @@ export default function PMHistoryPage() {
 
                 .sticky-header {
                     position: sticky !important;
-                    z-index: 1020;
+                    top: 60px !important;
+                    z-index: 1000;
                     background-color: var(--bs-light);
                     box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1); /* Add shadow for better visibility */
                 }
@@ -833,7 +1066,8 @@ export default function PMHistoryPage() {
                 }
                 .sticky-header-right {
                     position: sticky !important;
-                    z-index: 1050;
+                    top: 60px !important;
+                    z-index: 1010;
                     background-color: var(--bs-light);
                     border-left: 1px solid #dee2e6;
                 }
@@ -847,20 +1081,71 @@ export default function PMHistoryPage() {
                     </p>
                 </div>
                 <div className="d-flex gap-2">
-                    <button
-                        className="btn btn-success shadow-sm"
-                        onClick={exportToExcel}
-                        disabled={filteredRecords.length === 0}
-                    >
-                        <i className="bi bi-file-earmark-excel me-2"></i>Export Excel
-                    </button>
-                    <button
-                        className="btn btn-danger shadow-sm"
-                        onClick={exportToPDF}
-                        disabled={filteredRecords.length === 0}
-                    >
-                        <i className="bi bi-file-earmark-pdf me-2"></i>Export PDF
-                    </button>
+                    {/* Export Excel Split Button */}
+                    <div className="btn-group shadow-sm">
+                        <button
+                            type="button"
+                            className="btn btn-success"
+                            onClick={() => handleExportExcel('page')}
+                            disabled={records.length === 0}
+                        >
+                            <i className="bi bi-file-earmark-excel me-2"></i>Export Excel
+                        </button>
+                        <button
+                            type="button"
+                            className="btn btn-success dropdown-toggle dropdown-toggle-split"
+                            data-bs-toggle="dropdown"
+                            aria-expanded="false"
+                            disabled={records.length === 0}
+                        >
+                            <span className="visually-hidden">Toggle Dropdown</span>
+                        </button>
+                        <ul className="dropdown-menu">
+                            <li>
+                                <button className="dropdown-item" onClick={() => handleExportExcel('page')}>
+                                    Export Current Page
+                                </button>
+                            </li>
+                            <li>
+                                <button className="dropdown-item" onClick={() => handleExportExcel('all')}>
+                                    Export All Records
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+
+                    {/* Export PDF Split Button */}
+                    <div className="btn-group shadow-sm">
+                        <button
+                            type="button"
+                            className="btn btn-danger"
+                            onClick={() => handleExportPDF('page')}
+                            disabled={records.length === 0}
+                        >
+                            <i className="bi bi-file-earmark-pdf me-2"></i>Export PDF
+                        </button>
+                        <button
+                            type="button"
+                            className="btn btn-danger dropdown-toggle dropdown-toggle-split"
+                            data-bs-toggle="dropdown"
+                            aria-expanded="false"
+                            disabled={records.length === 0}
+                        >
+                            <span className="visually-hidden">Toggle Dropdown</span>
+                        </button>
+                        <ul className="dropdown-menu">
+                            <li>
+                                <button className="dropdown-item" onClick={() => handleExportPDF('page')}>
+                                    Export Current Page
+                                </button>
+                            </li>
+                            <li>
+                                <button className="dropdown-item" onClick={() => handleExportPDF('all')}>
+                                    Export All Records
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
                     <Link href={searchParams.get('returnTo') || "/"} className="btn btn-light shadow-sm border ms-3">
                         <i className="bi bi-arrow-left me-2"></i>
                         {searchParams.get('returnTo')?.includes('calendar') ? 'Back to Calendar' :
@@ -967,7 +1252,7 @@ export default function PMHistoryPage() {
                             <div className="d-grid">
                                 <span className="badge bg-primary bg-opacity-10 text-primary fs-6 py-2">
                                     <i className="bi bi-list-check me-2"></i>
-                                    {filteredRecords.length} Found
+                                    {totalItems} Found
                                 </span>
                             </div>
                         </div>
@@ -989,7 +1274,7 @@ export default function PMHistoryPage() {
                                 <span className="visually-hidden">Loading...</span>
                             </div>
                         </div>
-                    ) : filteredRecords.length === 0 ? (
+                    ) : records.length === 0 ? (
                         <div className="text-center py-5 text-muted">
                             <i className="bi bi-inbox fs-1 d-block mb-3 opacity-25"></i>
                             No PM records found for the selected filters
@@ -998,7 +1283,7 @@ export default function PMHistoryPage() {
                         <>
                             <div className="table-responsive" style={{ overflowX: 'auto' }}>
                                 <table className="table table-hover table-bordered border-secondary align-middle mb-0">
-                                    <thead className="bg-light text-secondary sticky-top" style={{ zIndex: 1020 }}>
+                                    <thead className="bg-light text-secondary" style={{ position: 'sticky', top: '60px', zIndex: 1000 }}>
                                         <tr>
                                             <th className="ps-4 py-3 text-center align-middle border fw-bold sticky-header" style={{ minWidth: '60px' }} rowSpan={2}>No</th>
                                             <th className="py-3 text-center align-middle border fw-bold sticky-header" style={{ minWidth: '100px' }} rowSpan={2}>Date</th>
@@ -1070,109 +1355,112 @@ export default function PMHistoryPage() {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {currentItems.map((record, index) => (
-                                            <tr key={record.id}>
-                                                <td className="ps-4 text-center fw-bold text-muted border-end">{indexOfFirstItem + index + 1}</td>
-                                                <td className="border-end text-center">
-                                                    <div className="fw-bold text-dark">
-                                                        {new Date(record.date).toLocaleDateString("th-TH")}
-                                                    </div>
-                                                </td>
-                                                <td className="border-end text-center">
-                                                    <div className="text-muted font-monospace">
-                                                        {new Date(record.date).toLocaleTimeString("th-TH", {
-                                                            hour: "2-digit",
-                                                            minute: "2-digit",
-                                                        })}
-                                                    </div>
-                                                </td>
-                                                <td className="border-end">
-                                                    <div className="fw-bold text-dark">{record.machine.name}</div>
-                                                    <small className="text-muted font-monospace">
-                                                        {record.machine.code}
-                                                    </small>
-                                                </td>
-                                                <td className="border-end">{record.inspector}</td>
-                                                <td className="border-end">{record.checker}</td>
-                                                <td className="text-center border-end">
-                                                    <span
-                                                        className={`badge rounded-pill px-3 py-2 fw-normal ${getRecordStatus(record) === "COMPLETED"
-                                                            ? "bg-success text-white"
-                                                            : "bg-danger text-white"
-                                                            }`}
-                                                    >
-                                                        {getRecordStatus(record)}
-                                                    </span>
-                                                </td>
-
-                                                {/* More Detail Values (Text, Dropdown) */}
-                                                {moreDetailTopics.map((topic, idx) => (
-                                                    <td key={`md-${idx}`} className="text-center border-start bg-primary bg-opacity-10">
-                                                        {getDisplayValue(record, topic.name)}
+                                        {currentItems.map((record, index) => {
+                                            const indexOfFirstItem = (currentPage - 1) * itemsPerPage;
+                                            return (
+                                                <tr key={record.id}>
+                                                    <td className="ps-4 text-center fw-bold text-muted border-end">{indexOfFirstItem + index + 1}</td>
+                                                    <td className="border-end text-center">
+                                                        <div className="fw-bold text-dark">
+                                                            {new Date(record.date).toLocaleDateString("th-TH")}
+                                                        </div>
                                                     </td>
-                                                ))}
-
-                                                {/* Image Values */}
-                                                {imageTopics.map((topic, idx) => (
-                                                    <td key={`img-${idx}`} className="text-center border-start bg-info bg-opacity-10">
-                                                        {getDisplayValue(record, topic.name)}
+                                                    <td className="border-end text-center">
+                                                        <div className="text-muted font-monospace">
+                                                            {new Date(record.date).toLocaleTimeString("th-TH", {
+                                                                hour: "2-digit",
+                                                                minute: "2-digit",
+                                                            })}
+                                                        </div>
                                                     </td>
-                                                ))}
-
-                                                {/* Checklist Values (OK/NG, Numeric) */}
-                                                {checklistTopics.map((topic, idx) => (
-                                                    <td key={`cl-${idx}`} className={`text-center border-start bg-success bg-opacity-10 ${getStatusColor(record, topic.name)}`}>
-                                                        {getDisplayValue(record, topic.name)}
+                                                    <td className="border-end">
+                                                        <div className="fw-bold text-dark">{record.machine.name}</div>
+                                                        <small className="text-muted font-monospace">
+                                                            {record.machine.code}
+                                                        </small>
                                                     </td>
-                                                ))}
-
-                                                {/* [NEW] Sub-Item Values */}
-                                                {subItemTopics.map((topic, idx) => (
-                                                    <td key={`sub-${idx}`} className={`text-center border-start bg-warning bg-opacity-10 ${getStatusColor(record, topic.name)}`}>
-                                                        {getDisplayValue(record, topic.name)}
-                                                    </td>
-                                                ))}
-
-                                                <td className="border-end">
-                                                    <div
-                                                        className="text-truncate"
-                                                        style={{ maxWidth: "150px" }}
-                                                        title={record.remark}
-                                                    >
-                                                        {record.remark || "-"}
-                                                    </div>
-                                                </td>
-                                                {/* Right Sticky Column: Actions */}
-                                                <td className="text-center pe-4 sticky-col-right" style={{ right: 0 }}>
-                                                    <div className="d-flex gap-2 justify-content-center">
-                                                        <button
-                                                            className="btn btn-sm btn-primary"
-                                                            onClick={() => {
-                                                                const returnUrl = encodeURIComponent(`${window.location.pathname}${window.location.search}`);
-                                                                router.push(`/pm/inspect/${record.id}?mode=view&returnTo=${returnUrl}`);
-                                                            }}
+                                                    <td className="border-end">{record.inspector}</td>
+                                                    <td className="border-end">{record.checker}</td>
+                                                    <td className="text-center border-end">
+                                                        <span
+                                                            className={`badge rounded-pill px-3 py-2 fw-normal ${getRecordStatus(record) === "COMPLETED"
+                                                                ? "bg-success text-white"
+                                                                : "bg-danger text-white"
+                                                                }`}
                                                         >
-                                                            <i className="bi bi-eye me-1"></i>View
-                                                        </button>
-                                                        <button
-                                                            className="btn btn-sm btn-warning text-white"
-                                                            onClick={() => {
-                                                                const returnUrl = encodeURIComponent(`${window.location.pathname}${window.location.search}`);
-                                                                router.push(`/pm/inspect/${record.id}?mode=edit&returnTo=${returnUrl}`);
-                                                            }}
+                                                            {getRecordStatus(record)}
+                                                        </span>
+                                                    </td>
+
+                                                    {/* More Detail Values (Text, Dropdown) */}
+                                                    {moreDetailTopics.map((topic, idx) => (
+                                                        <td key={`md-${idx}`} className="text-center border-start bg-primary bg-opacity-10">
+                                                            {getDisplayValue(record, topic.name)}
+                                                        </td>
+                                                    ))}
+
+                                                    {/* Image Values */}
+                                                    {imageTopics.map((topic, idx) => (
+                                                        <td key={`img-${idx}`} className="text-center border-start bg-info bg-opacity-10">
+                                                            {getDisplayValue(record, topic.name)}
+                                                        </td>
+                                                    ))}
+
+                                                    {/* Checklist Values (OK/NG, Numeric) */}
+                                                    {checklistTopics.map((topic, idx) => (
+                                                        <td key={`cl-${idx}`} className={`text-center border-start bg-success bg-opacity-10 ${getStatusColor(record, topic.name)}`}>
+                                                            {getDisplayValue(record, topic.name)}
+                                                        </td>
+                                                    ))}
+
+                                                    {/* [NEW] Sub-Item Values - pass true for isActualSubItem */}
+                                                    {subItemTopics.map((topic, idx) => (
+                                                        <td key={`sub-${idx}`} className={`text-center border-start bg-warning bg-opacity-10 ${getStatusColor(record, topic.name, true)}`}>
+                                                            {getDisplayValue(record, topic.name, true)}
+                                                        </td>
+                                                    ))}
+
+                                                    <td className="border-end">
+                                                        <div
+                                                            className="text-truncate"
+                                                            style={{ maxWidth: "150px" }}
+                                                            title={record.remark}
                                                         >
-                                                            <i className="bi bi-pencil me-1"></i>Edit
-                                                        </button>
-                                                        <button
-                                                            className="btn btn-sm btn-danger"
-                                                            onClick={() => handleDelete(record.id)}
-                                                        >
-                                                            <i className="bi bi-trash me-1"></i>Delete
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
+                                                            {record.remark || "-"}
+                                                        </div>
+                                                    </td>
+                                                    {/* Right Sticky Column: Actions */}
+                                                    <td className="text-center pe-4 sticky-col-right" style={{ right: 0 }}>
+                                                        <div className="d-flex gap-2 justify-content-center">
+                                                            <button
+                                                                className="btn btn-sm btn-primary"
+                                                                onClick={() => {
+                                                                    const returnUrl = encodeURIComponent(`${window.location.pathname}${window.location.search}`);
+                                                                    router.push(`/pm/inspect/${record.id}?mode=view&returnTo=${returnUrl}`);
+                                                                }}
+                                                            >
+                                                                <i className="bi bi-eye me-1"></i>View
+                                                            </button>
+                                                            <button
+                                                                className="btn btn-sm btn-warning text-white"
+                                                                onClick={() => {
+                                                                    const returnUrl = encodeURIComponent(`${window.location.pathname}${window.location.search}`);
+                                                                    router.push(`/pm/inspect/${record.id}?mode=edit&returnTo=${returnUrl}`);
+                                                                }}
+                                                            >
+                                                                <i className="bi bi-pencil me-1"></i>Edit
+                                                            </button>
+                                                            <button
+                                                                className="btn btn-sm btn-danger"
+                                                                onClick={() => handleDelete(record.id)}
+                                                            >
+                                                                <i className="bi bi-trash me-1"></i>Delete
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                             </div>
@@ -1180,7 +1468,7 @@ export default function PMHistoryPage() {
                             <div className="d-flex justify-content-center py-4">
                                 <Pagination
                                     currentPage={currentPage}
-                                    totalItems={filteredRecords.length}
+                                    totalItems={totalItems}
                                     itemsPerPage={itemsPerPage}
                                     onPageChange={handlePageChange}
                                 />

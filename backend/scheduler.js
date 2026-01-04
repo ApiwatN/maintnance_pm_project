@@ -12,8 +12,8 @@ const transporter = nodemailer.createTransport({
 });
 
 const startScheduler = () => {
-    // Run every minute to check for specific notification times
-    cron.schedule('* * * * *', async () => {
+    // Run every 15 minutes (at 00, 15, 30, 45)
+    cron.schedule('*/15 * * * *', async () => {
         try {
             const now = new Date();
             const currentHours = String(now.getHours()).padStart(2, '0');

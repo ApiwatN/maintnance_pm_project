@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSocket } from "../components/SocketProvider";
 import { useAuth } from "../../context/AuthContext";
+import RescheduleModal from "../components/RescheduleModal";
+import ActionPopover from "../components/ActionPopover";
 
 interface PMEvent {
     id: string;
@@ -26,13 +28,29 @@ interface PMEvent {
 
 export default function CalendarPage() {
     const { socket } = useSocket();
-    const { loading: authLoading } = useAuth(); // Rename to avoid conflict with local loading state
+    const { loading: authLoading, user } = useAuth();
     const [events, setEvents] = useState<PMEvent[]>([]);
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [loading, setLoading] = useState(true);
     const [selectedDateEvents, setSelectedDateEvents] = useState<{ date: Date, events: PMEvent[] } | null>(null);
     const [isLoaded, setIsLoaded] = useState(false);
     const router = useRouter();
+
+    // Permission-based states
+    const [rescheduleModal, setRescheduleModal] = useState<{
+        show: boolean;
+        machineId: number;
+        machineName: string;
+        preventiveTypeId: number;
+        preventiveTypeName: string;
+        currentDate?: string;
+    }>({ show: false, machineId: 0, machineName: '', preventiveTypeId: 0, preventiveTypeName: '' });
+
+    const [popover, setPopover] = useState<{
+        show: boolean;
+        anchorRect: { top: number; left: number; width: number; height: number } | null;
+        event: PMEvent | null;
+    }>({ show: false, anchorRect: null, event: null });
 
     useEffect(() => {
         if (!authLoading) {
@@ -150,21 +168,88 @@ export default function CalendarPage() {
         }
     };
 
-    const handleEventClick = (event: PMEvent) => {
+    // Check user permission for machine
+    const canAccessMachine = (machineId: number) => {
+        if (!user) return false;
+        if (user.systemRole === 'ADMIN') return true;
+        if (!user.assignedMachines || user.assignedMachines.length === 0) return false;
+        return user.assignedMachines.some(m => m.id === machineId);
+    };
+
+    const getUserPermission = () => {
+        if (!user) return 'PM_ONLY';
+        if (user.systemRole === 'ADMIN') return 'PM_AND_RESCHEDULE';
+        return user.permissionType || 'PM_ONLY';
+    };
+
+    const handleEventClick = (event: PMEvent, e?: React.MouseEvent) => {
         if (event.type === 'completed') {
             // For completed PM, navigate to inspection form in view-only mode
             const recordId = event.id.replace('record-', '');
             router.push(`/pm/inspect/${recordId}?mode=view&returnTo=/calendar`);
-        } else if (event.type === 'upcoming' || event.type === 'overdue') {
-            // For upcoming/overdue, navigate to inspection form for new PM
-            // Extract preventiveTypeId from event.id (format: schedule-machineId-typeId)
-            const parts = event.id.split('-');
-            const typeId = parts.length >= 3 ? parts[2] : null;
+            return;
+        }
 
+        if (event.type !== 'upcoming' && event.type !== 'overdue') {
+            return; // scheduled type - not clickable
+        }
+
+        // Check if user can access this machine
+        if (!canAccessMachine(event.machine.id)) {
+            return; // No access
+        }
+
+        const permission = getUserPermission();
+        const parts = event.id.split('-');
+        const typeId = parts.length >= 3 ? parseInt(parts[2]) : 0;
+
+        if (permission === 'PM_ONLY') {
+            // Direct to PM inspection
             const query = typeId ? `?typeId=${typeId}&returnTo=/calendar` : `?returnTo=/calendar`;
             router.push(`/pm/inspect/${event.machine.id}${query}`);
+        } else if (permission === 'RESCHEDULE_ONLY') {
+            // Show reschedule modal
+            setRescheduleModal({
+                show: true,
+                machineId: event.machine.id,
+                machineName: event.machine.name,
+                preventiveTypeId: typeId,
+                preventiveTypeName: event.preventiveType?.name || '-',
+                currentDate: event.date
+            });
+        } else {
+            // PM_AND_RESCHEDULE or ADMIN - show popover
+            if (e) {
+                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                setPopover({
+                    show: true,
+                    anchorRect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+                    event
+                });
+            }
         }
-        // For 'scheduled' type, do nothing (not clickable)
+    };
+
+    const handlePopoverInspect = () => {
+        if (!popover.event) return;
+        const parts = popover.event.id.split('-');
+        const typeId = parts.length >= 3 ? parts[2] : null;
+        const query = typeId ? `?typeId=${typeId}&returnTo=/calendar` : `?returnTo=/calendar`;
+        router.push(`/pm/inspect/${popover.event.machine.id}${query}`);
+    };
+
+    const handlePopoverReschedule = () => {
+        if (!popover.event) return;
+        const parts = popover.event.id.split('-');
+        const typeId = parts.length >= 3 ? parseInt(parts[2]) : 0;
+        setRescheduleModal({
+            show: true,
+            machineId: popover.event.machine.id,
+            machineName: popover.event.machine.name,
+            preventiveTypeId: typeId,
+            preventiveTypeName: popover.event.preventiveType?.name || '-',
+            currentDate: popover.event.date
+        });
     };
 
     const renderEventBadge = (event: PMEvent, idx: number, isModal: boolean = false) => {
@@ -179,7 +264,7 @@ export default function CalendarPage() {
                 onClick={(e: React.MouseEvent) => {
                     if (isClickable) {
                         e.stopPropagation();
-                        handleEventClick(event);
+                        handleEventClick(event, e);
                     }
                 }}
                 style={{
@@ -390,6 +475,27 @@ export default function CalendarPage() {
                     </div>
                 </div>
             )}
+
+            {/* Reschedule Modal */}
+            <RescheduleModal
+                show={rescheduleModal.show}
+                onClose={() => setRescheduleModal({ ...rescheduleModal, show: false })}
+                machineId={rescheduleModal.machineId}
+                machineName={rescheduleModal.machineName}
+                preventiveTypeId={rescheduleModal.preventiveTypeId}
+                preventiveTypeName={rescheduleModal.preventiveTypeName}
+                currentDate={rescheduleModal.currentDate}
+                onSuccess={fetchSchedule}
+            />
+
+            {/* Action Popover */}
+            <ActionPopover
+                show={popover.show}
+                anchorRect={popover.anchorRect}
+                onClose={() => setPopover({ show: false, anchorRect: null, event: null })}
+                onInspect={handlePopoverInspect}
+                onReschedule={handlePopoverReschedule}
+            />
         </div>
     );
 }

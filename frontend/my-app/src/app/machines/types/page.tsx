@@ -783,7 +783,15 @@ export default function PreventiveTypes() {
                             </div>
                             <div className="col-md-6">
                                 <label className="form-label fw-bold small text-muted">Notification Time</label>
-                                <input type="time" className="form-control" value={formData.notifyTime} onChange={e => setFormData({ ...formData, notifyTime: e.target.value })} />
+                                <select className="form-select" value={formData.notifyTime} onChange={e => setFormData({ ...formData, notifyTime: e.target.value })}>
+                                    {Array.from({ length: 24 }, (_, h) =>
+                                        [0, 15, 30, 45].map(m => {
+                                            const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                                            return <option key={time} value={time}>{time}</option>;
+                                        })
+                                    ).flat()}
+                                </select>
+                                <div className="form-text small">เลือกได้เฉพาะตรง 00, 15, 30, 45 นาที</div>
                             </div>
                         </div>
                     </div>

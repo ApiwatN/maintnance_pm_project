@@ -18,14 +18,31 @@ export default function AreaMaster() {
     const [areas, setAreas] = useState<Area[]>([]);
     const [formData, setFormData] = useState({ name: "", description: "" });
     const [editingId, setEditingId] = useState<number | null>(null);
+    
+    // [NEW] Server-Side Pagination State
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalItems, setTotalItems] = useState(0);
+    const itemsPerPage = 12;
 
     useEffect(() => {
         fetchAreas();
-    }, []);
+    }, [currentPage]); // Re-fetch when page changes
 
     const fetchAreas = () => {
-        axios.get(`${config.apiServer}/api/areas`)
-            .then(res => setAreas(res.data))
+        axios.get(`${config.apiServer}/api/areas`, {
+            params: { page: currentPage, limit: itemsPerPage }
+        })
+            .then(res => {
+                // Handle paginated response
+                if (res.data.pagination) {
+                    setAreas(res.data.data);
+                    setTotalItems(res.data.pagination.total);
+                } else {
+                    // Backward compatible - old format
+                    setAreas(res.data);
+                    setTotalItems(res.data.length);
+                }
+            })
             .catch(err => console.error(err));
     };
 
@@ -101,13 +118,8 @@ export default function AreaMaster() {
         setEditingId(null);
     };
 
-    // Pagination
-    const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 12;
-
-    const indexOfLastItem = currentPage * itemsPerPage;
-    const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-    const currentItems = areas.slice(indexOfFirstItem, indexOfLastItem);
+    // [NEW] Data is already paginated from server - use directly
+    const indexOfFirstItem = (currentPage - 1) * itemsPerPage;
 
     return (
         <div className="container-fluid py-4 bg-light min-vh-100">

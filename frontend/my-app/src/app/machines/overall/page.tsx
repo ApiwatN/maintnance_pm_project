@@ -3,9 +3,12 @@ import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import config from "../../config";
 import axios from "axios";
+import { useRouter } from "next/navigation";
 
 import { useAuth } from "../../../context/AuthContext";
 import { useSocket } from "../../components/SocketProvider";
+import RescheduleModal from "../../components/RescheduleModal";
+import ActionPopover from "../../components/ActionPopover";
 
 interface MachineStatus {
     id: number;
@@ -33,12 +36,87 @@ interface MachineStatus {
 }
 
 export default function OverallMachinePage() {
-    const { token, loading: authLoading } = useAuth();
+    const { token, loading: authLoading, user } = useAuth();
     const { socket } = useSocket();
+    const router = useRouter();
     const [machines, setMachines] = useState<MachineStatus[]>([]);
     const [loading, setLoading] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [areaFilter, setAreaFilter] = useState<string>("");
+
+    // Permission-based states
+    const [rescheduleModal, setRescheduleModal] = useState<{
+        show: boolean;
+        machineId: number;
+        machineName: string;
+        preventiveTypeId: number;
+        preventiveTypeName: string;
+        currentDate?: string;
+    }>({ show: false, machineId: 0, machineName: '', preventiveTypeId: 0, preventiveTypeName: '' });
+
+    const [popover, setPopover] = useState<{
+        show: boolean;
+        anchorRect: { top: number; left: number; width: number; height: number } | null;
+        machine: MachineStatus | null;
+    }>({ show: false, anchorRect: null, machine: null });
+
+    const getUserPermission = () => {
+        if (!user) return 'PM_ONLY';
+        if (user.systemRole === 'ADMIN') return 'PM_AND_RESCHEDULE';
+        return user.permissionType || 'PM_ONLY';
+    };
+
+    const handleMachineClick = (machine: MachineStatus, e: React.MouseEvent) => {
+        e.preventDefault();
+        const permission = getUserPermission();
+
+        // If NORMAL status, go to history
+        if (machine.status === 'NORMAL') {
+            router.push(`/pm/history/${machine.id}?returnTo=/machines/overall`);
+            return;
+        }
+
+        // Get the most critical plan
+        const criticalPlan = machine.allPlans?.find(p => p.status === 'OVERDUE' || p.status === 'UPCOMING') || machine.allPlans?.[0];
+
+        if (permission === 'PM_ONLY') {
+            router.push(`/pm/inspect/${machine.id}?returnTo=/machines/overall`);
+        } else if (permission === 'RESCHEDULE_ONLY') {
+            setRescheduleModal({
+                show: true,
+                machineId: machine.id,
+                machineName: machine.name,
+                preventiveTypeId: criticalPlan?.preventiveTypeId || 0,
+                preventiveTypeName: criticalPlan?.preventiveTypeName || '-',
+                currentDate: criticalPlan?.nextPMDate || undefined
+            });
+        } else {
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            setPopover({
+                show: true,
+                anchorRect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+                machine
+            });
+        }
+    };
+
+    const handlePopoverInspect = () => {
+        if (!popover.machine) return;
+        router.push(`/pm/inspect/${popover.machine.id}?returnTo=/machines/overall`);
+    };
+
+    const handlePopoverReschedule = () => {
+        if (!popover.machine) return;
+        const criticalPlan = popover.machine.allPlans?.find(p => p.status === 'OVERDUE' || p.status === 'UPCOMING') || popover.machine.allPlans?.[0];
+        setRescheduleModal({
+            show: true,
+            machineId: popover.machine.id,
+            machineName: popover.machine.name,
+            preventiveTypeId: criticalPlan?.preventiveTypeId || 0,
+            preventiveTypeName: criticalPlan?.preventiveTypeName || '-',
+            currentDate: criticalPlan?.nextPMDate || undefined
+        });
+    };
 
     const fetchStatus = () => {
         if (!token) return;
@@ -300,7 +378,11 @@ export default function OverallMachinePage() {
 
                                                 return (
                                                     <div key={machine.id} className="col-6 col-sm-1 col-md-1 col-lg-1">
-                                                        <Link href={machine.status === 'NORMAL' ? `/pm/history/${machine.id}?returnTo=/machines/overall` : `/pm/inspect/${machine.id}?returnTo=/machines/overall`} className="text-decoration-none">
+                                                        <div
+                                                            onClick={(e) => handleMachineClick(machine, e)}
+                                                            className="text-decoration-none"
+                                                            style={{ cursor: 'pointer' }}
+                                                        >
                                                             <div className={`card h-auto border-${color} shadow-sm position-relative hover-shadow transition-all`} style={{ transition: 'transform 0.2s', cursor: 'pointer' }}>
                                                                 <div className={`card-header bg-${color} text-white py-0 px-1 d-flex justify-content-between align-items-center`} style={{ minHeight: '22px' }}>
                                                                     <span className="fw-bold text-truncate" style={{ fontSize: '0.6rem' }} title={displayStatus}>{displayStatus}</span>
@@ -340,7 +422,7 @@ export default function OverallMachinePage() {
                                                                     </div>
                                                                 </div>
                                                             </div>
-                                                        </Link>
+                                                        </div>
                                                     </div>
                                                 );
                                             })}
@@ -359,6 +441,27 @@ export default function OverallMachinePage() {
                     No machines found.
                 </div>
             )}
+
+            {/* Reschedule Modal */}
+            <RescheduleModal
+                show={rescheduleModal.show}
+                onClose={() => setRescheduleModal({ ...rescheduleModal, show: false })}
+                machineId={rescheduleModal.machineId}
+                machineName={rescheduleModal.machineName}
+                preventiveTypeId={rescheduleModal.preventiveTypeId}
+                preventiveTypeName={rescheduleModal.preventiveTypeName}
+                currentDate={rescheduleModal.currentDate}
+                onSuccess={fetchStatus}
+            />
+
+            {/* Action Popover */}
+            <ActionPopover
+                show={popover.show}
+                anchorRect={popover.anchorRect}
+                onClose={() => setPopover({ show: false, anchorRect: null, machine: null })}
+                onInspect={handlePopoverInspect}
+                onReschedule={handlePopoverReschedule}
+            />
         </div>
     );
 }

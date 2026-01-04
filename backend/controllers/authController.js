@@ -37,6 +37,7 @@ exports.login = async (req, res) => {
                 id: user.id,
                 username: user.username,
                 systemRole: user.systemRole,
+                permissionType: user.permissionType,
                 name: user.name
             },
             SECRET_KEY,
@@ -50,6 +51,7 @@ exports.login = async (req, res) => {
                 username: user.username,
                 name: user.name,
                 systemRole: user.systemRole,
+                permissionType: user.permissionType,
                 role: user.role
             }
         });
@@ -79,6 +81,7 @@ exports.getMe = async (req, res) => {
             username: user.username,
             name: user.name,
             systemRole: user.systemRole,
+            permissionType: user.permissionType,
             role: user.role,
             assignedMachines: user.assignedMachines
         });

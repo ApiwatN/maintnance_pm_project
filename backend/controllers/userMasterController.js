@@ -22,6 +22,7 @@ exports.getAll = async (req, res) => {
                 email: true,
                 username: true,
                 systemRole: true,
+                permissionType: true,
                 assignedMachines: {
                     select: { id: true, name: true, code: true }
                 }
@@ -35,7 +36,7 @@ exports.getAll = async (req, res) => {
 
 exports.create = async (req, res) => {
     try {
-        const { name, role, employeeId, email, username, password, systemRole, assignedMachineIds } = req.body;
+        const { name, role, employeeId, email, username, password, systemRole, permissionType, assignedMachineIds } = req.body;
 
         // Check duplicate employeeId
         if (employeeId) {
@@ -58,6 +59,7 @@ exports.create = async (req, res) => {
                 username,
                 password,
                 systemRole: systemRole || 'USER',
+                permissionType: permissionType || 'PM_ONLY',
                 assignedMachines: {
                     connect: assignedMachineIds ? assignedMachineIds.map(id => ({ id: parseInt(id) })) : []
                 }
@@ -73,7 +75,7 @@ exports.create = async (req, res) => {
 exports.update = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, role, employeeId, email, username, password, systemRole, assignedMachineIds } = req.body;
+        const { name, role, employeeId, email, username, password, systemRole, permissionType, assignedMachineIds } = req.body;
 
         // Check duplicate employeeId (exclude self)
         if (employeeId) {
@@ -105,7 +107,8 @@ exports.update = async (req, res) => {
             email,
             username,
             password,
-            systemRole
+            systemRole,
+            permissionType
         };
 
         // Handle assigned machines update

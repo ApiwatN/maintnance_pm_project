@@ -9,6 +9,7 @@ interface User {
     username: string;
     name: string;
     systemRole: 'ADMIN' | 'USER';
+    permissionType: 'PM_ONLY' | 'RESCHEDULE_ONLY' | 'PM_AND_RESCHEDULE';
     role: string;
     assignedMachines?: { id: number; name: string; code: string }[];
 }

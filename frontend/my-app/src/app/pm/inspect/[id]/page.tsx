@@ -222,6 +222,11 @@ export default function InspectionForm() {
           fetchUsers(record.machine.id.toString());
         }
 
+        // [FIX] Set selectedTypeId from record
+        if (record.preventiveTypeId) {
+          setSelectedTypeId(record.preventiveTypeId);
+        }
+
         if (record.preventiveType) {
           setCurrentPlan({ preventiveType: record.preventiveType });
         } else if (record.preventiveTypeId && record.machine.pmPlans) {
@@ -229,21 +234,59 @@ export default function InspectionForm() {
           if (plan) setCurrentPlan(plan);
         }
 
+        // [FIX] Extract subItemDetails from record.details that have subItemName
+        const restoredSubItemDetails: any = {};
+        const standardDetails: any[] = [];
+
+        record.details.forEach((d: any) => {
+          if (d.subItemName) {
+            // This is a sub-item detail - find its index based on masterChecklist options
+            const masterChecklist = record.preventiveType?.masterChecklists?.find(
+              (mc: any) => mc.id === d.checklistId
+            );
+
+            if (masterChecklist?.options) {
+              try {
+                const opts = JSON.parse(masterChecklist.options);
+                if (opts.subItems && Array.isArray(opts.subItems)) {
+                  const subItemIndex = opts.subItems.indexOf(d.subItemName);
+                  if (subItemIndex !== -1) {
+                    const key = `${d.checklistId}_${subItemIndex}`;
+                    restoredSubItemDetails[key] = {
+                      checklistId: d.checklistId,
+                      topic: masterChecklist.topic,
+                      subItemName: d.subItemName,
+                      isPass: d.isPass,
+                      value: d.value || ""
+                    };
+                  }
+                }
+              } catch { /* ignore parse errors */ }
+            }
+          } else {
+            // Standard detail
+            standardDetails.push({
+              checklistId: d.checklistId,
+              isPass: d.isPass,
+              value: d.value || "",
+              remark: d.remark || "",
+              image: d.image || "",
+              imageBefore: d.imageBefore || "",
+              imageAfter: d.imageAfter || ""
+            });
+          }
+        });
+
+        console.log('[DEBUG] Restored subItemDetails from record:', restoredSubItemDetails);
+
         // Populate form data with existing values
         setFormData({
           inspector: record.inspector,
           checker: record.checker,
           remark: record.remark,
-          details: record.details.map((d: any) => ({
-            checklistId: d.checklistId,
-            isPass: d.isPass,
-            value: d.value || "",
-            remark: d.remark || "",
-            image: d.image || "",
-            imageBefore: d.imageBefore || "",
-            imageAfter: d.imageAfter || ""
-          }))
-        });
+          details: standardDetails,
+          subItemDetails: restoredSubItemDetails
+        } as any);
       })
       .catch((err) => console.error(err));
   };
@@ -273,10 +316,14 @@ export default function InspectionForm() {
               options[p.preventiveTypeId] = p.preventiveType.name;
             });
 
+            // [FIX] Set default value to first PM Type
+            const firstTypeId = data.pmPlans[0].preventiveTypeId.toString();
+
             const { value: selectedType } = await Swal.fire({
               title: 'Select PM Type',
               input: 'select',
               inputOptions: options,
+              inputValue: firstTypeId, // [FIX] Default to first PM Type
               inputPlaceholder: 'Select a PM Type',
               showCancelButton: false,
               allowOutsideClick: false,
@@ -285,6 +332,9 @@ export default function InspectionForm() {
 
             if (selectedType) {
               targetPlan = data.pmPlans.find((p: any) => p.preventiveTypeId === parseInt(selectedType));
+            } else {
+              // [FIX] Fallback to first PM Type if nothing selected
+              targetPlan = data.pmPlans[0];
             }
           }
         }
@@ -313,7 +363,33 @@ export default function InspectionForm() {
             imageBefore: "",
             imageAfter: ""
           }));
-          setFormData((prev) => ({ ...prev, details: initialDetails }));
+
+          // [FIX] Initialize subItemDetails for all checklists with subItems
+          const initialSubItemDetails: any = {};
+          sourceChecklists.forEach((c: any) => {
+            if (c.options) {
+              try {
+                const opts = JSON.parse(c.options);
+                if (opts.subItems && Array.isArray(opts.subItems)) {
+                  opts.subItems.forEach((subItemName: string, subItemIndex: number) => {
+                    const key = `${c.id}_${subItemIndex}`; // Use checklist.id instead of index
+                    initialSubItemDetails[key] = {
+                      checklistId: c.id,
+                      topic: c.topic,
+                      subItemName: subItemName,
+                      isPass: c.type !== 'NUMERIC', // Default OK for BOOLEAN
+                      value: ""
+                    };
+                  });
+                }
+              } catch { /* ignore parse errors */ }
+            }
+          });
+
+          console.log('[DEBUG] Initializing subItemDetails:', JSON.stringify(initialSubItemDetails, null, 2));
+          console.log('[DEBUG] initialSubItemDetails keys:', Object.keys(initialSubItemDetails));
+
+          setFormData((prev) => ({ ...prev, details: initialDetails, subItemDetails: initialSubItemDetails } as any));
         }
       })
       .catch((err) => console.error(err));
@@ -576,6 +652,9 @@ export default function InspectionForm() {
           }
         }
 
+        console.log('[DEBUG] Before Submit - formData.subItemDetails:', (formData as any).subItemDetails);
+        console.log('[DEBUG] Before Submit - selectedTypeId:', selectedTypeId);
+
         const payload = {
           machineId: machine?.id,
           inspector: formData.inspector,
@@ -587,8 +666,11 @@ export default function InspectionForm() {
             topic: currentChecklists[index]?.topic || "",
             checklistId: d.checklistId
           })),
-          preventiveTypeId: selectedTypeId // Include selected type
+          preventiveTypeId: selectedTypeId, // Include selected type
+          subItemDetails: (formData as any).subItemDetails || {} // [FIX] Include sub-item details
         };
+
+        console.log('[DEBUG] Payload subItemDetails:', payload.subItemDetails);
 
         const apiCall = isEditMode
           ? axios.put(`${config.apiServer}/api/pm/records/${params.id}`, payload)
@@ -803,7 +885,6 @@ export default function InspectionForm() {
                     </thead>
                     <tbody>
                       {group.checklists.map((checklist: any) => {
-                        const globalIndex = getGlobalIndex(checklist);
                         return (
                           <tr key={checklist.id}>
                             <td className="fw-bold bg-light align-middle">
@@ -811,7 +892,7 @@ export default function InspectionForm() {
                               {checklist.topic}
                             </td>
                             {subItemNames.map((name, idx) => {
-                              const subDetailKey = `${globalIndex}_${idx}`;
+                              const subDetailKey = `${checklist.id}_${idx}`; // Use checklist.id instead of globalIndex
                               // [NEW] Default isPass to true (OK)
                               const subDetail = (formData as any).subItemDetails?.[subDetailKey] || { isPass: true };
                               return (
@@ -842,8 +923,8 @@ export default function InspectionForm() {
                                       <input
                                         type="radio"
                                         className="btn-check"
-                                        name={`subitem_${globalIndex}_${idx}`}
-                                        id={`subitem_ok_${globalIndex}_${idx}`}
+                                        name={`subitem_${checklist.id}_${idx}`}
+                                        id={`subitem_ok_${checklist.id}_${idx}`}
                                         checked={subDetail.isPass === true}
                                         onChange={() => {
                                           const existingSubDetails = (formData as any).subItemDetails || {};
@@ -859,12 +940,12 @@ export default function InspectionForm() {
                                         }}
                                         disabled={isViewMode}
                                       />
-                                      <label className="btn btn-outline-success" htmlFor={`subitem_ok_${globalIndex}_${idx}`}>OK</label>
+                                      <label className="btn btn-outline-success" htmlFor={`subitem_ok_${checklist.id}_${idx}`}>OK</label>
                                       <input
                                         type="radio"
                                         className="btn-check"
-                                        name={`subitem_${globalIndex}_${idx}`}
-                                        id={`subitem_ng_${globalIndex}_${idx}`}
+                                        name={`subitem_${checklist.id}_${idx}`}
+                                        id={`subitem_ng_${checklist.id}_${idx}`}
                                         checked={subDetail.isPass === false}
                                         onChange={() => {
                                           const existingSubDetails = (formData as any).subItemDetails || {};
@@ -880,7 +961,7 @@ export default function InspectionForm() {
                                         }}
                                         disabled={isViewMode}
                                       />
-                                      <label className="btn btn-outline-danger" htmlFor={`subitem_ng_${globalIndex}_${idx}`}>NG</label>
+                                      <label className="btn btn-outline-danger" htmlFor={`subitem_ng_${checklist.id}_${idx}`}>NG</label>
                                     </div>
                                   )}
                                 </td>
