@@ -466,7 +466,7 @@ exports.getDashboardStats = async (req, res) => {
 exports.getMachineHistory = async (req, res) => {
     try {
         const { machineId } = req.params;
-        const { year, page = 1, limit = 10, pmTypeId } = req.query;
+        const { year, page = 1, limit = 10, pmTypeId, area, type } = req.query;
 
         const pageNum = parseInt(page) || 1;
         const limitNum = parseInt(limit) || 10;
@@ -497,6 +497,18 @@ exports.getMachineHistory = async (req, res) => {
         // Handle "all" machineId (if not already handled by RBAC)
         if (machineId && machineId !== 'all') {
             where.machineId = parseInt(machineId);
+        }
+
+        // [NEW] Filter by Area and Machine Type (Nested Relations)
+        if (area || type) {
+            where.machine = {
+                machineMaster: {
+                    machineType: {
+                        ...(type ? { name: type } : {}),
+                        ...(area ? { area: { name: area } } : {})
+                    }
+                }
+            };
         }
 
         // Filter by year if provided

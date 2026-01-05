@@ -95,7 +95,19 @@ export default function PMHistoryPage() {
     const [loading, setLoading] = useState(true);
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
     const [selectedPMType, setSelectedPMType] = useState("");
-    const [pmTypes, setPMTypes] = useState<{ id: number; name: string }[]>([]);
+    const [pmTypes, setPMTypes] = useState<{
+        id: number;
+        name: string;
+        masterChecklists?: {
+            id: number;
+            topic: string;
+            type: string;
+            minVal?: number;
+            maxVal?: number;
+            options?: string;
+            order?: number;
+        }[];
+    }[]>([]);
 
     // Separate topics for Checklists (OK/NG, Numeric), Images, and More Details (Text, Dropdown)
     const [checklistTopics, setChecklistTopics] = useState<{ name: string, display: string, type: string }[]>([]);
@@ -123,31 +135,82 @@ export default function PMHistoryPage() {
 
     // Generate year options (current year ± 5 years)
     const currentYear = new Date().getFullYear();
-    const years = Array.from({ length: 11 }, (_, i) => (currentYear - 5 + i).toString());
+    const years = Array.from({ length: 11 }, (_, i) => (currentYear - 1 + i).toString());
 
+    // Fetch dropdown data on mount
     // Fetch dropdown data on mount
     useEffect(() => {
         if (authLoading) return;
+        console.log("Fetching initial data...");
         Promise.all([
             axios.get(`${config.apiServer}/api/areas`),
             axios.get(`${config.apiServer}/api/machine-types`),
-            axios.get(`${config.apiServer}/api/machines`)
-        ]).then(([areasRes, typesRes, machinesRes]) => {
+            axios.get(`${config.apiServer}/api/machines`),
+            axios.get(`${config.apiServer}/api/preventive-types`)
+        ]).then(([areasRes, typesRes, machinesRes, pmTypesRes]) => {
             setAreas(areasRes.data);
             setMachineTypes(typesRes.data);
             setAllMachines(machinesRes.data);
+            setPMTypes(pmTypesRes.data);
+
+            let targetPMType = "";
+            const urlTypeId = searchParams.get('typeId');
+            if (urlTypeId) targetPMType = urlTypeId;
 
             // Set initial machine details from URL param
-            if (initialMachineId) {
+            if (initialMachineId && initialMachineId !== 'all') {
                 const initialMachine = machinesRes.data.find((m: MachineOption) => m.id === parseInt(initialMachineId));
                 if (initialMachine) {
                     setSelectedMachineName(initialMachine.name);
                     setSelectedArea(initialMachine.machineMaster?.machineType?.area?.name || "");
                     setSelectedType(initialMachine.machineMaster?.machineType?.name || "");
+                    setSelectedMachineId(initialMachineId);
+                }
+            } else {
+                // [NEW] Load from localStorage if no specific machine in URL
+                try {
+                    const savedFilters = localStorage.getItem('pmHistoryFilters');
+                    if (savedFilters) {
+                        const filters = JSON.parse(savedFilters);
+                        if (filters.year) setSelectedYear(filters.year);
+                        if (filters.area) setSelectedArea(filters.area);
+                        if (filters.type) setSelectedType(filters.type);
+                        if (filters.machineId) {
+                            setSelectedMachineId(filters.machineId);
+                            const machine = machinesRes.data.find((m: MachineOption) => m.id === parseInt(filters.machineId));
+                            if (machine) setSelectedMachineName(machine.name);
+                        }
+                        if (filters.pmType && !targetPMType) targetPMType = filters.pmType;
+                    }
+                } catch (e) {
+                    console.error("Error loading filters from localStorage", e);
                 }
             }
+
+            // Force select first PM Type if none selected (since "All" option is removed)
+            if (!targetPMType && pmTypesRes.data.length > 0) {
+                targetPMType = pmTypesRes.data[0].id.toString();
+            }
+
+            if (targetPMType) setSelectedPMType(targetPMType);
+
+            setIsLoaded(true);
         }).catch(console.error);
     }, [initialMachineId, authLoading]);
+
+    // [NEW] Save filters to localStorage
+    useEffect(() => {
+        if (isLoaded) {
+            const filters = {
+                year: selectedYear,
+                area: selectedArea,
+                type: selectedType,
+                machineId: selectedMachineId,
+                pmType: selectedPMType
+            };
+            localStorage.setItem('pmHistoryFilters', JSON.stringify(filters));
+        }
+    }, [selectedYear, selectedArea, selectedType, selectedMachineId, selectedPMType, isLoaded]);
 
     // Filter machine types based on selected area
     const filteredMachineTypes = useMemo(() => {
@@ -234,6 +297,7 @@ export default function PMHistoryPage() {
         const targetId = selectedMachineId || 'all';
 
         // Build query params including pagination
+        console.log("Fetching history with PM Type:", selectedPMType);
         const params = new URLSearchParams({
             year: selectedYear,
             page: currentPage.toString(),
@@ -241,6 +305,13 @@ export default function PMHistoryPage() {
         });
         if (selectedPMType) {
             params.append('pmTypeId', selectedPMType);
+        }
+        // [NEW] Send Area and Type for filtering "All Machines"
+        if (selectedArea) {
+            params.append('area', selectedArea);
+        }
+        if (selectedType) {
+            params.append('type', selectedType);
         }
 
         // Fetch both: history records AND machine details (only if specific machine)
@@ -283,39 +354,14 @@ export default function PMHistoryPage() {
                     setSelectedMachineName("All Machines");
                 }
 
-                // Get PM Types from machine's pmPlans (not from records)
-                const plansTypes = machine?.pmPlans?.map((p: any) => ({
-                    id: p.preventiveType?.id || p.preventiveTypeId,
-                    name: p.preventiveType?.name || `Type ${p.preventiveTypeId}`
-                })).filter((t: any) => t.id) || [];
-
-                // Also extract from records as fallback for legacy data
-                const recordTypes = Array.from(
-                    new Map(
-                        paginatedRecords
-                            .filter((r: PMRecord) => r.preventiveType)
-                            .map((r: PMRecord) => [
-                                r.preventiveType!.id,
-                                { id: r.preventiveType!.id, name: r.preventiveType!.name }
-                            ])
-                    ).values()
-                );
-
-                // Merge and dedupe
-                const allTypesMap = new Map();
-                [...plansTypes, ...recordTypes].forEach((t: any) => {
-                    if (t.id) allTypesMap.set(t.id, t);
-                });
-                const types = Array.from(allTypesMap.values());
-
-                setPMTypes(types as { id: number; name: string }[]);
+                // [REMOVED] Logic that overwrites pmTypes based on current page records
+                // We now fetch all PM Types on mount to allow full filtering capability
 
                 // Prioritize typeId from URL, otherwise use first type (only on first load)
+                // Prioritize typeId from URL
                 const urlTypeId = searchParams.get('typeId');
-                if (urlTypeId && types.some((t: any) => t.id === parseInt(urlTypeId)) && !selectedPMType) {
+                if (urlTypeId && !selectedPMType) {
                     setSelectedPMType(urlTypeId);
-                } else if (types.length > 0 && !selectedPMType) {
-                    setSelectedPMType((types as any[])[0].id.toString());
                 }
 
                 setLoading(false);
@@ -352,154 +398,102 @@ export default function PMHistoryPage() {
 
     // Process records to extract column headers (no filtering - server already filtered)
     const processRecords = () => {
-        // Use records directly (already filtered by server)
+        // [FIX] Use the selected PM Type configuration to define columns
+        // This ensures we ONLY show columns relevant to the selected type, ignoring "ghost" data in records
+        const currentPMTypeConfig = pmTypes.find(t => t.id.toString() === selectedPMType);
+        const validMasterChecklists = currentPMTypeConfig?.masterChecklists || [];
 
         // [NEW] First, identify all topics that have subItems (to exclude from main columns)
         const topicsWithSubItems = new Set<string>();
-        records.forEach(record => {
-            const masterChecklists = record.preventiveType?.masterChecklists || [];
-            masterChecklists.forEach((mc: any) => {
-                if (mc.options) {
-                    try {
-                        const opts = JSON.parse(mc.options);
-                        if (opts.subItems && Array.isArray(opts.subItems) && opts.subItems.length > 0) {
-                            topicsWithSubItems.add(mc.topic);
-                        }
-                    } catch { /* ignore parse errors */ }
-                }
-            });
+        validMasterChecklists.forEach((mc: any) => {
+            if (mc.options) {
+                try {
+                    const opts = JSON.parse(mc.options);
+                    if (opts.subItems && Array.isArray(opts.subItems) && opts.subItems.length > 0) {
+                        topicsWithSubItems.add(mc.topic);
+                    }
+                } catch { /* ignore parse errors */ }
+            }
         });
 
         // Separate topics into Checklists (BOOLEAN, NUMERIC), Images (IMAGE), and More Details (TEXT, DROPDOWN)
-        // [FIX] Include order field for sorting
         const checklistMap = new Map<string, { name: string, display: string, type: string, order: number, masterChecklist?: any }>();
         const imageMap = new Map<string, { name: string, display: string, type: string, order: number }>();
         const detailsMap = new Map<string, { name: string, display: string, type: string, order: number }>();
 
-        // Collect from Details
-        records.forEach(record => {
-            record.details.forEach(detail => {
-                const topicName = detail.masterChecklist?.topic || detail.topic;
-                const type = detail.masterChecklist?.type || detail.checklist?.type || 'BOOLEAN';
-                const master = detail.masterChecklist || detail.checklist;
-                const order = (master as any)?.order ?? 9999; // Default high order for items without order
+        // [FIX] Iterate over the MASTER CONFIGURATION, not the records
+        validMasterChecklists.forEach((mc: any) => {
+            const topicName = mc.topic;
+            const type = mc.type;
+            const order = mc.order ?? 9999;
 
-                // [FIX] Skip topics that have subItems (they will be shown as sub-item columns instead)
-                if (topicName && topicsWithSubItems.has(topicName)) {
-                    return; // Skip this topic - it has subItems
-                }
+            // Skip topics that have subItems (they will be shown as sub-item columns instead)
+            if (topicsWithSubItems.has(topicName)) {
+                return;
+            }
 
-                if (topicName) {
-                    let displayName = topicName;
+            let displayName = topicName;
 
-                    // For Numeric, check if it's dynamic
-                    let isDynamic = false;
-                    if (type === 'NUMERIC' && master?.options) {
-                        try {
-                            const parsed = JSON.parse(master.options);
-                            if (parsed.parentId && parsed.conditions) isDynamic = true;
-                        } catch { }
-                    }
+            // For Numeric, check if it's dynamic
+            let isDynamic = false;
+            if (type === 'NUMERIC' && mc.options) {
+                try {
+                    const parsed = JSON.parse(mc.options);
+                    if (parsed.parentId && parsed.conditions) isDynamic = true;
+                } catch { }
+            }
 
-                    if (type === 'NUMERIC' && !isDynamic && master?.minVal !== undefined && master?.maxVal !== undefined) {
-                        displayName = `${topicName} (${master.minVal}-${master.maxVal})`;
-                    } else if (type === 'NUMERIC' && isDynamic) {
-                        displayName = `${topicName} (Dynamic)`;
-                    }
+            if (type === 'NUMERIC' && !isDynamic && mc.minVal !== undefined && mc.maxVal !== undefined) {
+                displayName = `${topicName} (${mc.minVal}-${mc.maxVal})`;
+            } else if (type === 'NUMERIC' && isDynamic) {
+                displayName = `${topicName} (Dynamic)`;
+            }
 
-                    if (type === 'BOOLEAN' || type === 'NUMERIC') {
-                        if (!checklistMap.has(topicName)) {
-                            checklistMap.set(topicName, { name: topicName, display: displayName, type, order, masterChecklist: master });
-                        }
-                    } else if (type === 'IMAGE') {
-                        if (!imageMap.has(topicName)) {
-                            imageMap.set(topicName, { name: topicName, display: topicName, type, order });
-                        }
-                    } else if (type === 'TEXT' || type === 'DROPDOWN') {
-                        if (!detailsMap.has(topicName)) {
-                            detailsMap.set(topicName, { name: topicName, display: topicName, type, order });
-                        }
-                    }
-                }
-            });
+            if (type === 'BOOLEAN' || type === 'NUMERIC') {
+                checklistMap.set(topicName, { name: topicName, display: displayName, type, order, masterChecklist: mc });
+            } else if (type === 'IMAGE') {
+                imageMap.set(topicName, { name: topicName, display: topicName, type, order });
+            } else if (type === 'TEXT' || type === 'DROPDOWN') {
+                detailsMap.set(topicName, { name: topicName, display: topicName, type, order });
+            }
         });
 
         // [FIX] Collect Sub-Item topics from MasterChecklist.options.subItems
-        // This ensures sub-items are shown even if no records exist yet
         const checklistSubItemsMap = new Map<string, { name: string, display: string, type: string, parentTopic: string, order: number }>();
         const detailSubItemsMap = new Map<string, { name: string, display: string, type: string, parentTopic: string, order: number }>();
 
-        // First, collect from preventiveType.masterChecklists (configuration)
-        records.forEach(record => {
-            const masterChecklists = record.preventiveType?.masterChecklists || [];
-            masterChecklists.forEach((mc: any) => {
-                if (mc.options) {
-                    try {
-                        const opts = JSON.parse(mc.options);
-                        if (opts.subItems && Array.isArray(opts.subItems)) {
-                            opts.subItems.forEach((subItem: string) => {
-                                const displayName = `${mc.topic} : ${subItem}`;
-                                const key = displayName;
-                                const entry = {
-                                    name: key,
-                                    display: displayName,
-                                    type: mc.type,
-                                    parentTopic: mc.topic,
-                                    order: mc.order ?? 9999
-                                };
+        validMasterChecklists.forEach((mc: any) => {
+            if (mc.options) {
+                try {
+                    const opts = JSON.parse(mc.options);
+                    if (opts.subItems && Array.isArray(opts.subItems)) {
+                        opts.subItems.forEach((subItem: string) => {
+                            const displayName = `${mc.topic} : ${subItem}`;
+                            const key = displayName;
+                            const entry = {
+                                name: key,
+                                display: displayName,
+                                type: mc.type,
+                                parentTopic: mc.topic,
+                                order: mc.order ?? 9999
+                            };
 
-                                if (mc.type === 'TEXT' || mc.type === 'DROPDOWN') {
-                                    if (!detailSubItemsMap.has(key)) {
-                                        detailSubItemsMap.set(key, entry);
-                                    }
-                                } else {
-                                    if (!checklistSubItemsMap.has(key)) {
-                                        checklistSubItemsMap.set(key, entry);
-                                    }
-                                }
-                            });
-                        }
-                    } catch { /* ignore parse errors */ }
-                }
-            });
-        });
-
-        // Also collect from record.details for legacy records
-        records.forEach(record => {
-            record.details.forEach((detail: any) => {
-                if (detail.subItemName) {
-                    const baseTopic = detail.topic?.split(' : ')[0] || detail.masterChecklist?.topic || 'Unknown';
-                    const displayName = `${baseTopic} : ${detail.subItemName}`;
-                    const key = displayName;
-                    const type = detail.masterChecklist?.type || 'BOOLEAN';
-                    const order = detail.masterChecklist?.order ?? 9999;
-
-                    const entry = {
-                        name: key,
-                        display: displayName,
-                        type: type,
-                        parentTopic: baseTopic,
-                        order: order
-                    };
-
-                    if (type === 'TEXT' || type === 'DROPDOWN') {
-                        if (!detailSubItemsMap.has(key)) {
-                            detailSubItemsMap.set(key, entry);
-                        }
-                    } else {
-                        if (!checklistSubItemsMap.has(key)) {
-                            checklistSubItemsMap.set(key, entry);
-                        }
+                            if (mc.type === 'TEXT' || mc.type === 'DROPDOWN') {
+                                detailSubItemsMap.set(key, entry);
+                            } else {
+                                checklistSubItemsMap.set(key, entry);
+                            }
+                        });
                     }
-                }
-            });
+                } catch { /* ignore parse errors */ }
+            }
         });
 
-        // [FIX] Sort by order before setting state
+        // Sort by order before setting state
         setChecklistTopics(Array.from(checklistMap.values()).sort((a, b) => a.order - b.order));
         setImageTopics(Array.from(imageMap.values()).sort((a, b) => a.order - b.order));
         setMoreDetailTopics(Array.from(detailsMap.values()).sort((a, b) => a.order - b.order));
-        // [NEW] Combine both types into subItemTopics, sorted by order
+
         setSubItemTopics([
             ...Array.from(detailSubItemsMap.values()).sort((a, b) => a.order - b.order),
             ...Array.from(checklistSubItemsMap.values()).sort((a, b) => a.order - b.order)
@@ -1048,11 +1042,9 @@ export default function PMHistoryPage() {
                 }
 
                 .sticky-header {
-                    position: sticky !important;
-                    top: 60px !important;
-                    z-index: 1000;
+                    /* Removed position: sticky to rely on thead's sticky behavior for vertical scrolling */
                     background-color: var(--bs-light);
-                    box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1); /* Add shadow for better visibility */
+                    box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
                 }
                 .sticky-col-right {
                     position: sticky !important;
@@ -1066,8 +1058,9 @@ export default function PMHistoryPage() {
                 }
                 .sticky-header-right {
                     position: sticky !important;
-                    top: 60px !important;
-                    z-index: 1010;
+                    top: 0px !important; /* Match thead top */
+                    right: 0;
+                    z-index: 1010; /* Higher than thead (1000) */
                     background-color: var(--bs-light);
                     border-left: 1px solid #dee2e6;
                 }
@@ -1204,9 +1197,18 @@ export default function PMHistoryPage() {
                                 className="form-select bg-light border-0"
                                 value={selectedMachineId}
                                 onChange={(e) => {
-                                    const machine = filteredMachines.find(m => m.id === parseInt(e.target.value));
-                                    setSelectedMachineId(e.target.value);
+                                    const newMachineId = e.target.value;
+                                    const machine = filteredMachines.find(m => m.id === parseInt(newMachineId));
+                                    setSelectedMachineId(newMachineId);
                                     setSelectedMachineName(machine?.name || "");
+
+                                    // Update URL to persist selection on refresh
+                                    const returnTo = searchParams.get('returnTo') || '/';
+                                    if (newMachineId) {
+                                        router.push(`/pm/history/${newMachineId}?returnTo=${returnTo}`);
+                                    } else {
+                                        router.push(`/pm/history/all?returnTo=${returnTo}`);
+                                    }
                                 }}
                             >
                                 <option value="">All Machine Name</option>
@@ -1240,7 +1242,7 @@ export default function PMHistoryPage() {
                                 onChange={(e) => setSelectedPMType(e.target.value)}
                                 disabled={pmTypes.length === 0}
                             >
-                                <option value="">All PM Types</option>
+                                {/* <option value="">All PM Types</option> */}
                                 {pmTypes.map((type) => (
                                     <option key={type.id} value={type.id}>
                                         {type.name}
@@ -1283,7 +1285,7 @@ export default function PMHistoryPage() {
                         <>
                             <div className="table-responsive" style={{ overflowX: 'auto' }}>
                                 <table className="table table-hover table-bordered border-secondary align-middle mb-0">
-                                    <thead className="bg-light text-secondary" style={{ position: 'sticky', top: '60px', zIndex: 1000 }}>
+                                    <thead className="bg-light text-secondary" style={{ position: 'sticky', top: '0px', zIndex: 1000 }}>
                                         <tr>
                                             <th className="ps-4 py-3 text-center align-middle border fw-bold sticky-header" style={{ minWidth: '60px' }} rowSpan={2}>No</th>
                                             <th className="py-3 text-center align-middle border fw-bold sticky-header" style={{ minWidth: '100px' }} rowSpan={2}>Date</th>
