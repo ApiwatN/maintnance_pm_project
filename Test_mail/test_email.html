@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Email Sender (Internal SMTP)</title>
+    <style>
+        body {
+            font-family: 'Sarabun', sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h2 {
+            text-align: center;
+            color: #333;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input,
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background-color: #218838;
+        }
+
+        #status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>📧 Test Email Sender</h2>
+    <p class="subtitle">Internal SMTP (192.168.98.1:25)</p>
+
+    <div class="form-group">
+        <label for="to">To (ส่งหาใคร):</label>
+        <input type="email" id="to" placeholder="example@minebea.co.th" required>
+    </div>
+
+    <div class="form-group">
+        <label for="subject">Subject (หัวข้อ):</label>
+        <input type="text" id="subject" value="Test Email from Internal SMTP" required>
+    </div>
+
+    <div class="form-group">
+        <label for="message">Message (ข้อความ):</label>
+        <textarea id="message" rows="5"
+            required>This is a test email to verify the Internal SMTP configuration.</textarea>
+    </div>
+
+    <button onclick="sendEmail()" id="sendBtn">Send Email</button>
+
+    <div id="status"></div>
+
+    <script>
+        async function sendEmail() {
+            const to = document.getElementById('to').value;
+            const subject = document.getElementById('subject').value;
+            const message = document.getElementById('message').value;
+            const statusDiv = document.getElementById('status');
+            const sendBtn = document.getElementById('sendBtn');
+
+            if (!to) {
+                alert('Please enter a recipient email.');
+                return;
+            }
+
+            statusDiv.style.display = 'none';
+            statusDiv.className = '';
+            sendBtn.disabled = true;
+            sendBtn.innerText = 'Sending...';
+
+            try {
+                const response = await fetch('http://localhost:5005/send-email', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ to, subject, message })
+                });
+
+                const data = await response.json();
+
+                statusDiv.style.display = 'block';
+                if (data.success) {
+                    statusDiv.className = 'success';
+                    statusDiv.innerText = '✅ Email sent successfully! Server response: ' + data.info;
+                } else {
+                    statusDiv.className = 'error';
+                    statusDiv.innerText = '❌ Failed to send email: ' + data.error;
+                }
+            } catch (error) {
+                statusDiv.style.display = 'block';
+                statusDiv.className = 'error';
+                statusDiv.innerText = '❌ Network error: ' + error.message;
+            } finally {
+                sendBtn.disabled = false;
+                sendBtn.innerText = 'Send Email';
+            }
+        }
+    </script>
+
+</body>
+
+</html>

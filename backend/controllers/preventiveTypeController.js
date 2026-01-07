@@ -43,7 +43,7 @@ exports.getAllTypes = async (req, res) => {
 // Create a new preventive type
 exports.createType = async (req, res) => {
     try {
-        const { name, description, image, isFixedDate, emailRecipients, notifyAdvanceDays, notifyTime } = req.body;
+        const { name, description, image, isFixedDate, emailRecipients, notifyAdvanceDays } = req.body;
         const type = await prisma.preventiveType.create({
             data: {
                 name,
@@ -52,8 +52,7 @@ exports.createType = async (req, res) => {
                 isFixedDate: isFixedDate !== undefined ? isFixedDate : true,
                 postponeLogic: req.body.postponeLogic || 'SHIFT',
                 emailRecipients,
-                notifyAdvanceDays: notifyAdvanceDays ? parseInt(notifyAdvanceDays) : 3,
-                notifyTime: notifyTime || "08:00"
+                notifyAdvanceDays: notifyAdvanceDays ? parseInt(notifyAdvanceDays) : 3
             },
             include: { masterChecklists: true }
         });
@@ -67,7 +66,7 @@ exports.createType = async (req, res) => {
 exports.updateType = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, description, image, isFixedDate, emailRecipients, notifyAdvanceDays, notifyTime } = req.body;
+        const { name, description, image, isFixedDate, emailRecipients, notifyAdvanceDays } = req.body;
         const type = await prisma.preventiveType.update({
             where: { id: parseInt(id) },
             data: {
@@ -77,8 +76,7 @@ exports.updateType = async (req, res) => {
                 isFixedDate: isFixedDate !== undefined ? isFixedDate : undefined,
                 postponeLogic: req.body.postponeLogic,
                 emailRecipients,
-                notifyAdvanceDays: notifyAdvanceDays !== undefined ? parseInt(notifyAdvanceDays) : undefined,
-                notifyTime
+                notifyAdvanceDays: notifyAdvanceDays !== undefined ? parseInt(notifyAdvanceDays) : undefined
             },
             include: { masterChecklists: true }
         });

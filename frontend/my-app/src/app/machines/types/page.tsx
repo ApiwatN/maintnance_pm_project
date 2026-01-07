@@ -87,7 +87,7 @@ export default function PreventiveTypes() {
     const { isAuthenticated, loading } = useAuth(); // [FIX] loading instead of authLoading
     const [types, setTypes] = useState<MachineType[]>([]);
     const [selectedType, setSelectedType] = useState<MachineType | null>(null);
-    const [formData, setFormData] = useState({ name: "", description: "", image: "", isFixedDate: true, postponeLogic: "SHIFT", emailRecipients: "", notifyAdvanceDays: 3, notifyTime: "08:00" }); // [NEW] Email Settings
+    const [formData, setFormData] = useState({ name: "", description: "", image: "", isFixedDate: true, postponeLogic: "SHIFT", emailRecipients: "", notifyAdvanceDays: 3 }); // [UPDATED] Removed notifyTime
     const [checklistData, setChecklistData] = useState({
         topic: "",
         type: "BOOLEAN",
@@ -199,15 +199,14 @@ export default function PreventiveTypes() {
             isFixedDate: type.isFixedDate !== undefined ? type.isFixedDate : true,
             postponeLogic: type.postponeLogic || "SHIFT",
             emailRecipients: (type as any).emailRecipients || "",
-            notifyAdvanceDays: (type as any).notifyAdvanceDays !== undefined ? (type as any).notifyAdvanceDays : 3,
-            notifyTime: (type as any).notifyTime || "08:00"
+            notifyAdvanceDays: (type as any).notifyAdvanceDays !== undefined ? (type as any).notifyAdvanceDays : 3
         });
         const modalBtn = document.getElementById("openTypeModalBtn");
         if (modalBtn) modalBtn.click();
     };
 
     const resetForm = () => {
-        setFormData({ name: "", description: "", image: "", isFixedDate: true, postponeLogic: "SHIFT", emailRecipients: "", notifyAdvanceDays: 3, notifyTime: "08:00" });
+        setFormData({ name: "", description: "", image: "", isFixedDate: true, postponeLogic: "SHIFT", emailRecipients: "", notifyAdvanceDays: 3 });
         setEditingId(null);
     };
 
@@ -776,23 +775,10 @@ export default function PreventiveTypes() {
                             <input type="text" className="form-control" value={formData.emailRecipients} onChange={e => setFormData({ ...formData, emailRecipients: e.target.value })} placeholder="e.g. manager@example.com, staff@example.com" />
                             <div className="form-text">Leave empty to disable email notifications for this type.</div>
                         </div>
-                        <div className="row g-3">
-                            <div className="col-md-6">
-                                <label className="form-label fw-bold small text-muted">Advance Notice (Days)</label>
-                                <input type="number" className="form-control" value={formData.notifyAdvanceDays} onChange={e => setFormData({ ...formData, notifyAdvanceDays: parseInt(e.target.value) })} min="0" />
-                            </div>
-                            <div className="col-md-6">
-                                <label className="form-label fw-bold small text-muted">Notification Time</label>
-                                <select className="form-select" value={formData.notifyTime} onChange={e => setFormData({ ...formData, notifyTime: e.target.value })}>
-                                    {Array.from({ length: 24 }, (_, h) =>
-                                        [0, 15, 30, 45].map(m => {
-                                            const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-                                            return <option key={time} value={time}>{time}</option>;
-                                        })
-                                    ).flat()}
-                                </select>
-                                <div className="form-text small">เลือกได้เฉพาะตรง 00, 15, 30, 45 นาที</div>
-                            </div>
+                        <div className="mb-3">
+                            <label className="form-label fw-bold small text-muted">Advance Notice (Days)</label>
+                            <input type="number" className="form-control" value={formData.notifyAdvanceDays} onChange={e => setFormData({ ...formData, notifyAdvanceDays: parseInt(e.target.value) })} min="0" />
+                            <div className="form-text small">จำนวนวันที่จะส่ง Email แจ้งเตือนล่วงหน้าก่อนถึงกำหนด PM (จัดการเวลาส่งผ่าน Windows Task Scheduler)</div>
                         </div>
                     </div>
 
