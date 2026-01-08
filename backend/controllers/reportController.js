@@ -54,7 +54,7 @@ exports.getReport = async (req, res) => {
                     }
                 },
                 details: {
-                    include: { checklist: true }
+                    include: { masterChecklist: true }
                 }
             },
             orderBy: { date: 'desc' }

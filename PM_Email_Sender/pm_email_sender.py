@@ -68,29 +68,37 @@ def get_due_machines(conn, preventive_type_id, notify_advance_days):
     today = date.today()
     
     cursor = conn.cursor()
+    # Join with MachineMaster, MachineType, and Area to get full hierarchy
     cursor.execute("""
-        SELECT m.code, m.name, p.nextPMDate
+        SELECT m.code, m.name, p.nextPMDate,
+               ISNULL(mt.name, 'N/A') as machineType,
+               ISNULL(a.name, 'N/A') as areaName
         FROM MachinePMPlan p
         JOIN Machine m ON p.machineId = m.id
+        LEFT JOIN MachineMaster mm ON m.machineMasterId = mm.id
+        LEFT JOIN MachineType mt ON mm.machineTypeId = mt.id
+        LEFT JOIN Area a ON mt.areaId = a.id
         WHERE p.preventiveTypeId = ?
           AND p.nextPMDate IS NOT NULL
     """, preventive_type_id)
     
     due_machines = []
     for row in cursor.fetchall():
-        code, name, next_pm_date = row
+        code, name, next_pm_date, machine_type, area_name = row
         if next_pm_date:
             # Calculate days difference
             next_date = next_pm_date.date() if hasattr(next_pm_date, 'date') else next_pm_date
             diff_days = (next_date - today).days
             
-            # Check if exactly N days in advance
-            if diff_days == notify_advance_days:
+            # Check if exactly N days in advance OR Overdue
+            if diff_days <= notify_advance_days:
                 due_machines.append({
                     'code': code,
                     'name': name,
                     'date': next_date.strftime('%Y-%m-%d'),
-                    'daysLeft': diff_days
+                    'daysLeft': diff_days,
+                    'machineType': machine_type,
+                    'area': area_name
                 })
     
     return due_machines
@@ -103,12 +111,33 @@ def build_email_html(pm_type_name, notify_advance_days, machines):
     # Build machine rows
     machine_rows = ""
     for idx, m in enumerate(machines, 1):
+        days_left = m['daysLeft']
+        
+        if days_left < 0:
+            status_label = "OVERDUE"
+            remaining_text = f"{abs(days_left)} days late"
+            status_color = "#d32f2f" # Red
+            bg_color = "#ffebee" # Light Red
+        elif days_left == 0:
+            status_label = "DUE TODAY"
+            remaining_text = "-"
+            status_color = "#f57c00" # Orange
+            bg_color = "#fff3e0" # Light Orange
+        else:
+            status_label = "UPCOMING"
+            remaining_text = f"{days_left} days"
+            status_color = "#1976D2" # Blue
+            bg_color = "#ffffff" # White
+
         machine_rows += f"""
-        <tr>
+        <tr style="background-color: {bg_color};">
             <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; text-align: center;">{idx}</td>
-            <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; font-weight: bold; color: #2196F3;">{m['code']}</td>
-            <td style="padding: 12px; border-bottom: 1px solid #e0e0e0;">{m['name']}</td>
-            <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; text-align: center; color: #e53935; font-weight: bold;">{m['date']}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #e0e0e0;">{m['area']}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #e0e0e0;">{m['machineType']}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; font-weight: bold;">{m['name']}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; text-align: center; color: #333;">{m['date']}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; text-align: center; font-weight: bold; color: {status_color};">{status_label}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #e0e0e0; text-align: center; color: #555;">{remaining_text}</td>
         </tr>
         """
     
@@ -120,7 +149,7 @@ def build_email_html(pm_type_name, notify_advance_days, machines):
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
-    <div style="max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+    <div style="max-width: 1000px; margin: 20px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
         
         <!-- Header -->
         <div style="background: linear-gradient(135deg, #1976D2 0%, #42A5F5 100%); padding: 30px; text-align: center;">
@@ -155,10 +184,13 @@ def build_email_html(pm_type_name, notify_advance_days, machines):
             <table style="width: 100%; border-collapse: collapse; background-color: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
                 <thead>
                     <tr style="background-color: #1976D2; color: #fff;">
-                        <th style="padding: 14px; text-align: center;">No.</th>
-                        <th style="padding: 14px; text-align: left;">Code</th>
-                        <th style="padding: 14px; text-align: left;">Machine Name</th>
-                        <th style="padding: 14px; text-align: center;">PM Due Date</th>
+                        <th style="padding: 14px; text-align: center; width: 5%;">No.</th>
+                        <th style="padding: 14px; text-align: left; width: 15%;">Area</th>
+                        <th style="padding: 14px; text-align: left; width: 15%;">Machine Type</th>
+                        <th style="padding: 14px; text-align: left; width: 25%;">Machine Name</th>
+                        <th style="padding: 14px; text-align: center; width: 15%;">PM Due Date</th>
+                        <th style="padding: 14px; text-align: center; width: 15%;">Status</th>
+                        <th style="padding: 14px; text-align: center; width: 10%;">Remaining</th>
                     </tr>
                 </thead>
                 <tbody>

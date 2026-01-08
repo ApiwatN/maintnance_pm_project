@@ -49,10 +49,8 @@ export default function OverallMachinePage() {
         show: boolean;
         machineId: number;
         machineName: string;
-        preventiveTypeId: number;
-        preventiveTypeName: string;
-        currentDate?: string;
-    }>({ show: false, machineId: 0, machineName: '', preventiveTypeId: 0, preventiveTypeName: '' });
+        allPlans?: MachineStatus['allPlans'];
+    }>({ show: false, machineId: 0, machineName: '' });
 
     const [popover, setPopover] = useState<{
         show: boolean;
@@ -86,9 +84,7 @@ export default function OverallMachinePage() {
                 show: true,
                 machineId: machine.id,
                 machineName: machine.name,
-                preventiveTypeId: criticalPlan?.preventiveTypeId || 0,
-                preventiveTypeName: criticalPlan?.preventiveTypeName || '-',
-                currentDate: criticalPlan?.nextPMDate || undefined
+                allPlans: machine.allPlans
             });
         } else {
             const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -107,14 +103,11 @@ export default function OverallMachinePage() {
 
     const handlePopoverReschedule = () => {
         if (!popover.machine) return;
-        const criticalPlan = popover.machine.allPlans?.find(p => p.status === 'OVERDUE' || p.status === 'UPCOMING') || popover.machine.allPlans?.[0];
         setRescheduleModal({
             show: true,
             machineId: popover.machine.id,
             machineName: popover.machine.name,
-            preventiveTypeId: criticalPlan?.preventiveTypeId || 0,
-            preventiveTypeName: criticalPlan?.preventiveTypeName || '-',
-            currentDate: criticalPlan?.nextPMDate || undefined
+            allPlans: popover.machine.allPlans
         });
     };
 
@@ -448,9 +441,7 @@ export default function OverallMachinePage() {
                 onClose={() => setRescheduleModal({ ...rescheduleModal, show: false })}
                 machineId={rescheduleModal.machineId}
                 machineName={rescheduleModal.machineName}
-                preventiveTypeId={rescheduleModal.preventiveTypeId}
-                preventiveTypeName={rescheduleModal.preventiveTypeName}
-                currentDate={rescheduleModal.currentDate}
+                allPlans={rescheduleModal.allPlans}
                 onSuccess={fetchStatus}
             />
 
