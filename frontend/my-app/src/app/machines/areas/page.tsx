@@ -18,7 +18,7 @@ export default function AreaMaster() {
     const [areas, setAreas] = useState<Area[]>([]);
     const [formData, setFormData] = useState({ name: "", description: "" });
     const [editingId, setEditingId] = useState<number | null>(null);
-    
+
     // [NEW] Server-Side Pagination State
     const [currentPage, setCurrentPage] = useState(1);
     const [totalItems, setTotalItems] = useState(0);
@@ -150,7 +150,7 @@ export default function AreaMaster() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {currentItems.map((area, index) => (
+                                {areas.map((area, index) => (
                                     <tr key={area.id}>
                                         <td className="ps-4 text-muted">{indexOfFirstItem + index + 1}</td>
                                         <td className="fw-bold">{area.name}</td>

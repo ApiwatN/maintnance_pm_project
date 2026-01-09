@@ -7,10 +7,10 @@ const getApiServer = () => {
         const hostname = window.location.hostname;
         // User requested Frontend HTTPS -> Backend HTTP
         // So we always return HTTP for the backend
-        return `https://${hostname}:5003`;
+        return `https://${hostname}:5006`;
     }
     // Default fallback
-    return "https://localhost:5003";
+    return "https://localhost:5006";
 };
 
 export default {
