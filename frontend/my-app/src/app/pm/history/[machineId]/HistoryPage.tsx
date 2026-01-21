@@ -691,7 +691,23 @@ export default function PMHistoryPage() {
         // If status is already 'COMPLETED' or 'CHECKED', we might want to override based on content?
         // User request: "Completed when all pass, if not pass show CHECKED (NG)"
         // We check if ANY detail is NG.
-        const hasNG = record.details.some(d => !d.isPass);
+        // [FIX] Skip "ghost items" - NUMERIC details with no value should not count as NG
+        const hasNG = record.details.some(d => {
+            // Skip if isPass is already true
+            if (d.isPass) return false;
+
+            // Get the type from masterChecklist or checklist
+            const type = ((d as any).masterChecklist?.type || (d as any).checklist?.type || '').toUpperCase();
+
+            // For NUMERIC type: skip if value is empty (not filled in = ghost item)
+            if (type === 'NUMERIC' && (!d.value || d.value.trim() === '')) {
+                return false;
+            }
+
+            // For other types or NUMERIC with value, check isPass
+            return !d.isPass;
+        });
+
         if (hasNG) return 'CHECKED (NG)';
         return 'COMPLETED'; // Or 'CHECKED (ALL OK)'? User said "completed เมื่อทุกอัน ผ่านหมด".
     };

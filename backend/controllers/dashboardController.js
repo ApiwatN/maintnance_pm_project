@@ -1,5 +1,17 @@
 const prisma = require('../prismaClient');
 
+// [FIX] Helper function to check if a detail should be considered NG
+// Skips "ghost items" - NUMERIC details with no value
+const isDetailNG = (detail) => {
+    if (detail.isPass) return false;
+    const type = (detail.masterChecklist?.type || detail.checklist?.type || '').toUpperCase();
+    // For NUMERIC type: skip if value is empty, null, or "null" string (ghost item)
+    if (type === 'NUMERIC' && (!detail.value || detail.value.toString().trim() === '' || detail.value === 'null')) {
+        return false;
+    }
+    return !detail.isPass;
+};
+
 exports.getDashboardStats = async (req, res) => {
     try {
         const today = new Date();
@@ -31,8 +43,17 @@ exports.getDashboardStats = async (req, res) => {
                         }
                     }
                 },
-                // Include recent records to check for NG per plan
-                // pmrecords removed for optimization
+                // [FIX] Include recent records to dynamically calculate status
+                pmrecords: {
+                    take: 20,
+                    orderBy: { date: 'desc' },
+                    where: { status: { in: ['COMPLETED', 'LATE'] } },
+                    include: {
+                        details: {
+                            include: { masterChecklist: true }
+                        }
+                    }
+                }
             }
         });
 
@@ -61,9 +82,16 @@ exports.getDashboardStats = async (req, res) => {
             } else {
                 // One row per plan
                 machine.pmPlans.forEach(plan => {
-                    // Check Last PM Status for THIS Plan (Optimized)
-                    let lastCheckStatus = plan.lastCheckStatus || null;
-                    // Fallback logic removed as we now have backfilled data and live updates
+                    // [FIX] Dynamically calculate lastCheckStatus from latest record
+                    let lastCheckStatus = null;
+                    if (machine.pmrecords && machine.pmrecords.length > 0) {
+                        // Find the latest record for this specific plan
+                        const latestRecord = machine.pmrecords.find(r => r.preventiveTypeId === plan.preventiveTypeId);
+                        if (latestRecord) {
+                            const hasNG = latestRecord.details.some(d => isDetailNG(d));
+                            lastCheckStatus = hasNG ? 'HAS_NG' : 'ALL_OK';
+                        }
+                    }
 
                     // Determine Schedule Status first (for the row data)
                     let scheduleStatus = 'OK';

@@ -895,29 +895,62 @@ export default function InspectionForm() {
                               const subDetailKey = `${checklist.id}_${idx}`; // Use checklist.id instead of globalIndex
                               // [NEW] Default isPass to true (OK)
                               const subDetail = (formData as any).subItemDetails?.[subDetailKey] || { isPass: true };
+                              // [FIX] Resolve dynamic min/max from parent dropdown
+                              const { min: resolvedMin, max: resolvedMax } = resolveMinMax(checklist, formData.details);
                               return (
                                 <td key={idx} className="text-center align-middle">
                                   {checklist.type === 'NUMERIC' ? (
-                                    <input
-                                      type="number"
-                                      className="form-control form-control-sm text-center"
-                                      placeholder="Value"
-                                      style={{ minWidth: '60px' }}
-                                      value={subDetail.value || ''}
-                                      onChange={(e) => {
-                                        const existingSubDetails = (formData as any).subItemDetails || {};
-                                        const newSubDetails = { ...existingSubDetails };
-                                        newSubDetails[subDetailKey] = {
-                                          ...subDetail,
-                                          value: e.target.value,
-                                          checklistId: checklist.id,
-                                          subItemName: name,
-                                          topic: checklist.topic
-                                        };
-                                        setFormData({ ...formData, subItemDetails: newSubDetails } as any);
-                                      }}
-                                      disabled={isViewMode}
-                                    />
+                                    <div className="d-flex flex-column align-items-center">
+                                      <input
+                                        type="number"
+                                        className={`form-control form-control-sm text-center ${subDetail.value !== undefined && subDetail.value !== ''
+                                          ? (subDetail.isPass ? 'border-success text-success' : 'border-danger text-danger')
+                                          : ''
+                                          }`}
+                                        placeholder="Value"
+                                        style={{
+                                          minWidth: '70px',
+                                          fontWeight: subDetail.value !== undefined && subDetail.value !== '' ? 'bold' : 'normal',
+                                          backgroundColor: subDetail.value !== undefined && subDetail.value !== ''
+                                            ? (subDetail.isPass ? 'rgba(25, 135, 84, 0.1)' : 'rgba(220, 53, 69, 0.1)')
+                                            : 'white'
+                                        }}
+                                        value={subDetail.value || ''}
+                                        onChange={(e) => {
+                                          const existingSubDetails = (formData as any).subItemDetails || {};
+                                          const newSubDetails = { ...existingSubDetails };
+
+                                          // [FIX] Calculate isPass using resolved dynamic min/max
+                                          const inputValue = parseFloat(e.target.value);
+                                          let calculatedIsPass = true; // Default to pass
+
+                                          if (!isNaN(inputValue)) {
+                                            // Re-resolve min/max to get current values
+                                            const { min, max } = resolveMinMax(checklist, formData.details);
+                                            if (min != null && max != null) {
+                                              calculatedIsPass = inputValue >= min && inputValue <= max;
+                                            }
+                                          }
+
+                                          newSubDetails[subDetailKey] = {
+                                            ...subDetail,
+                                            value: e.target.value,
+                                            isPass: calculatedIsPass,
+                                            checklistId: checklist.id,
+                                            subItemName: name,
+                                            topic: checklist.topic
+                                          };
+                                          setFormData({ ...formData, subItemDetails: newSubDetails } as any);
+                                        }}
+                                        disabled={isViewMode}
+                                      />
+                                      {/* [FIX] Display resolved dynamic min/max */}
+                                      {resolvedMin != null && resolvedMax != null && (
+                                        <small className="text-muted mt-1" style={{ fontSize: '0.65rem' }}>
+                                          ({resolvedMin} - {resolvedMax})
+                                        </small>
+                                      )}
+                                    </div>
                                   ) : (
                                     <div className="btn-group btn-group-sm" role="group">
                                       <input

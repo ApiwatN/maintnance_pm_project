@@ -70,7 +70,10 @@ export default function OverallMachinePage() {
 
         // If NORMAL status, go to history
         if (machine.status === 'NORMAL') {
-            router.push(`/pm/history/${machine.id}?returnTo=/machines/overall`);
+            // [FIX] Pass typeId of the first plan for correct PM Type filter
+            const firstPlan = machine.allPlans?.[0];
+            const typeIdParam = firstPlan ? `&typeId=${firstPlan.preventiveTypeId}` : '';
+            router.push(`/pm/history/${machine.id}?returnTo=/machines/overall${typeIdParam}`);
             return;
         }
 
@@ -160,6 +163,39 @@ export default function OverallMachinePage() {
             socket.off('machine_update');
         };
     }, [socket, token]); // Re-bind if token changes (though fetchStatus uses closure or ref? actually fetchStatus uses token from scope? No, it uses token from useAuth hook which is stable? Wait, fetchStatus uses token from scope, but token is in dependency of first useEffect. fetchStatus definition captures scope. Better to just call fetchStatus.)
+
+    // Initialize Bootstrap tooltips
+    useEffect(() => {
+        if (typeof window !== 'undefined' && machines.length > 0) {
+            // Add custom CSS for wider tooltips
+            const style = document.createElement('style');
+            style.id = 'custom-tooltip-style';
+            style.textContent = `
+                .tooltip-inner {
+                    max-width: 500px !important;
+                    text-align: left !important;
+                }
+            `;
+            document.head.appendChild(style);
+
+            // Dynamically import Bootstrap
+            // @ts-expect-error - Bootstrap types not available but works at runtime
+            import('bootstrap').then((bootstrap) => {
+                const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+                const tooltipList = Array.from(tooltipTriggerList).map(tooltipTriggerEl =>
+                    new bootstrap.Tooltip(tooltipTriggerEl)
+                );
+
+                // Cleanup tooltips on unmount or re-render
+                return () => {
+                    tooltipList.forEach(tooltip => tooltip.dispose());
+                    // Remove custom style
+                    const styleEl = document.getElementById('custom-tooltip-style');
+                    if (styleEl) styleEl.remove();
+                };
+            });
+        }
+    }, [machines]);
 
     useEffect(() => {
         if (machines.length > 0 || areaFilter) {
@@ -369,12 +405,30 @@ export default function OverallMachinePage() {
                                                     }
                                                 }
 
+                                                // Build tooltip content with PM details - prevent wrapping
+                                                const tooltipContent = machine.allPlans?.map(plan => {
+                                                    let statusText = '';
+                                                    if (plan.status === 'OVERDUE') {
+                                                        statusText = `⚠️ เกินกำหนดแล้ว ${Math.abs(plan.daysUntil || 0)} วัน`;
+                                                    } else if (plan.status === 'UPCOMING') {
+                                                        statusText = `🔔 ใกล้ถึงกำหนดในอีก ${plan.daysUntil || 0} วัน`;
+                                                    } else {
+                                                        statusText = `✅ PM เรียบร้อยแล้ว`;
+                                                    }
+                                                    // Wrap each line in div with nowrap to prevent breaking
+                                                    return `<div style="white-space: nowrap;"><strong>${plan.preventiveTypeName}:</strong> ${statusText}</div>`;
+                                                }).join('') || 'ไม่มีข้อมูล PM';
+
                                                 return (
                                                     <div key={machine.id} className="col-6 col-sm-1 col-md-1 col-lg-1">
                                                         <div
                                                             onClick={(e) => handleMachineClick(machine, e)}
                                                             className="text-decoration-none"
                                                             style={{ cursor: 'pointer' }}
+                                                            data-bs-toggle="tooltip"
+                                                            data-bs-html="true"
+                                                            data-bs-placement="top"
+                                                            title={tooltipContent}
                                                         >
                                                             <div className={`card h-auto border-${color} shadow-sm position-relative hover-shadow transition-all`} style={{ transition: 'transform 0.2s', cursor: 'pointer' }}>
                                                                 <div className={`card-header bg-${color} text-white py-0 px-1 d-flex justify-content-between align-items-center`} style={{ minHeight: '22px' }}>
@@ -399,11 +453,11 @@ export default function OverallMachinePage() {
                                                                                     : 'text-secondary';
 
                                                                                 return (
-                                                                                    <div key={plan.preventiveTypeId} className="d-flex justify-content-between">
-                                                                                        <span className={`${textClass} text-truncate`} style={{ maxWidth: '50%' }} title={plan.preventiveTypeName}>
+                                                                                    <div key={plan.preventiveTypeId} className="d-flex justify-content-between align-items-center text-nowrap" style={{ overflow: 'hidden' }}>
+                                                                                        <span className={`${textClass} text-truncate`} title={plan.preventiveTypeName}>
                                                                                             {plan.preventiveTypeName}:
                                                                                         </span>
-                                                                                        <span className={`fw-bold ${textClass}`}>
+                                                                                        <span className={`fw-bold ${textClass} ms-1`} style={{ flexShrink: 0 }}>
                                                                                             {plan.nextPMDate ? new Date(plan.nextPMDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' }) : '-'}
                                                                                         </span>
                                                                                     </div>

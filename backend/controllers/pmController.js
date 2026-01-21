@@ -1,5 +1,23 @@
 const prisma = require('../prismaClient');
 
+// [FIX] Helper function to check if a detail should be considered NG
+// Skips "ghost items" - NUMERIC details with no value
+const isDetailNG = (detail, masterChecklist = null) => {
+    // If isPass is true, it's not NG
+    if (detail.isPass) return false;
+
+    // Get type from masterChecklist or detail itself
+    const type = (masterChecklist?.type || detail.masterChecklist?.type || detail.checklist?.type || '').toUpperCase();
+
+    // For NUMERIC type: skip if value is empty (not filled in = ghost item)
+    if (type === 'NUMERIC' && (!detail.value || detail.value.toString().trim() === '')) {
+        return false;
+    }
+
+    // For other types or NUMERIC with value, check isPass
+    return !detail.isPass;
+};
+
 // Get PM Schedule/Records for Calendar
 exports.getSchedule = async (req, res) => {
     try {
@@ -33,7 +51,9 @@ exports.getSchedule = async (req, res) => {
                     }
                 },
                 preventiveType: true,
-                details: true // [NEW] Include details to check for NG
+                details: {
+                    include: { masterChecklist: true } // [FIX] Include for type checking in isDetailNG
+                }
             },
             orderBy: { date: 'desc' }
         });
@@ -59,7 +79,8 @@ exports.getSchedule = async (req, res) => {
         // Add completed PM records
         records.forEach(record => {
             // [NEW] Calculate lastCheckStatus from details
-            const hasNG = record.details && record.details.some(d => !d.isPass);
+            // [FIX] Use helper to skip ghost items
+            const hasNG = record.details && record.details.some(d => isDetailNG(d));
             const lastCheckStatus = hasNG ? 'HAS_NG' : 'ALL_OK';
 
             events.push({
@@ -268,7 +289,8 @@ exports.recordPM = async (req, res) => {
                 };
 
                 // [NEW] Update lastCheckStatus
-                const hasNG = details.some(d => !d.isPass);
+                // [FIX] Use helper to skip ghost items
+                const hasNG = details.some(d => isDetailNG(d));
                 updateData.lastCheckStatus = hasNG ? 'HAS_NG' : 'ALL_OK';
 
                 if (plan.frequencyDays > 0) {
@@ -652,7 +674,8 @@ exports.updateRecord = async (req, res) => {
         });
 
         // [FIX] Update MachinePMPlan.lastCheckStatus to sync with Dashboard
-        const hasNG = allDetails.some(d => !d.isPass);
+        // [FIX] Use helper to skip ghost items
+        const hasNG = allDetails.some(d => isDetailNG(d));
         const newLastCheckStatus = hasNG ? 'HAS_NG' : 'ALL_OK';
 
         // Find and update the PM Plan for this machine and preventive type
@@ -899,7 +922,11 @@ exports.getMachineStatusOverview = async (req, res) => {
                 pmrecords: {
                     take: 20,
                     orderBy: { date: 'desc' },
-                    include: { details: true }
+                    include: {
+                        details: {
+                            include: { masterChecklist: true } // [FIX] Include for type checking in isDetailNG
+                        }
+                    }
                 }
             }
         });
@@ -922,7 +949,8 @@ exports.getMachineStatusOverview = async (req, res) => {
                         const lastRec = machine.pmrecords.find(r => r.preventiveTypeId === plan.preventiveTypeId);
                         if (lastRec) {
                             anyRecord = true;
-                            const hasNG = lastRec.details.some(d => !d.isPass);
+                            // [FIX] Use helper to skip ghost items
+                            const hasNG = lastRec.details.some(d => isDetailNG(d));
                             if (hasNG) anyNG = true;
                         }
                     }

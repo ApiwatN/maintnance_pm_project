@@ -234,6 +234,89 @@ def build_email_html(pm_type_name, notify_advance_days, machines):
     """.strip()
 
 
+def build_no_pm_email_html(pm_type_name, notify_advance_days):
+    """Build HTML email content for when there are no machines due for PM"""
+    sent_date = datetime.now().strftime('%d/%m/%Y %H:%M')
+    
+    return f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
+    <div style="max-width: 800px; margin: 20px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+        
+        <!-- Header -->
+        <div style="background: linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%); padding: 30px; text-align: center;">
+            <h1 style="color: #ffffff; margin: 0; font-size: 24px;">
+                ✅ PM Status - No Pending Tasks
+            </h1>
+        </div>
+        
+        <!-- PM Info -->
+        <div style="padding: 25px; background-color: #E8F5E9; border-bottom: 1px solid #C8E6C9;">
+            <table style="width: 100%;">
+                <tr>
+                    <td style="padding: 5px 0;"><strong>PM Type:</strong></td>
+                    <td style="padding: 5px 0; color: #388E3C; font-weight: bold;">{pm_type_name}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 5px 0;"><strong>Advance Notice:</strong></td>
+                    <td style="padding: 5px 0;">{notify_advance_days} days</td>
+                </tr>
+                <tr>
+                    <td style="padding: 5px 0;"><strong>Sent:</strong></td>
+                    <td style="padding: 5px 0;">{sent_date}</td>
+                </tr>
+            </table>
+        </div>
+        
+        <!-- No PM Message -->
+        <div style="padding: 40px 25px; text-align: center;">
+            <div style="font-size: 60px; margin-bottom: 20px;">🎉</div>
+            <h2 style="color: #388E3C; margin: 0 0 15px 0; font-size: 22px;">
+                No Machines Due for PM Today
+            </h2>
+            <p style="color: #666; font-size: 16px; margin: 0; line-height: 1.6;">
+                Great news! There are no machines currently due for preventive maintenance<br>
+                within the {notify_advance_days}-day advance notice period.
+            </p>
+        </div>
+        
+        <!-- Action Button -->
+        <div style="padding: 0 25px 25px; text-align: center;">
+            <a href="{APP_BASE_URL}/machines/overall" 
+               style="display: inline-block; padding: 14px 35px; background: linear-gradient(135deg, #1976D2 0%, #42A5F5 100%); color: #fff; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 12px rgba(25,118,210,0.4);">
+                🔗 View All PM Plans
+            </a>
+        </div>
+        
+        <!-- Contact Info -->
+        <div style="padding: 20px 25px; background-color: #FAFAFA; border-top: 1px solid #e0e0e0;">
+            <p style="margin: 0 0 10px 0; font-size: 14px; color: #555;">
+                <strong>If you have any questions, please contact:</strong>
+            </p>
+            <ul style="margin: 0; padding-left: 20px; color: #666; font-size: 14px;">
+                <li>Apiwat Nonut, Tel: 2018, IoT Section</li>
+                <li>Panachai Poochomchuan, Tel: 2016, Maintenance Section</li>
+            </ul>
+        </div>
+        
+        <!-- Footer -->
+        <div style="padding: 15px; background-color: #37474F; text-align: center;">
+            <p style="color: #B0BEC5; margin: 0; font-size: 12px;">
+                Sent from PM Maintenance System
+            </p>
+        </div>
+        
+    </div>
+</body>
+</html>
+    """.strip()
+
+
 def send_email(to_emails, subject, html_body):
     """Send email via SMTP Relay (No Authentication - Like Test_mail_2)"""
     if not SMTP_FROM:
@@ -286,13 +369,19 @@ def main():
             if due_machines:
                 print(f"   📌 Found {len(due_machines)} machines due for PM")
                 
-                # Build and send email
+                # Build and send email with machine list
                 html_body = build_email_html(pm_name, advance_days, due_machines)
                 subject = f"📅 PM Alert: {pm_name} - {len(due_machines)} Machines Due for PM"
                 
                 send_email(recipients, subject, html_body)
             else:
-                print(f"   ✓ No machines due for PM today")
+                print(f"   ✓ No machines due for PM - sending notification")
+                
+                # Build and send email for no PM due
+                html_body = build_no_pm_email_html(pm_name, advance_days)
+                subject = f"✅ PM Status: {pm_name} - No Machines Due for PM Today"
+                
+                send_email(recipients, subject, html_body)
         
         conn.close()
         print("\n" + "=" * 50)

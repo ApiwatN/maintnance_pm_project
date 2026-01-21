@@ -253,43 +253,7 @@ export default function PMHistoryPage() {
         processRecords();
     }, [records]);
 
-    // Load filters from localStorage
-    useEffect(() => {
-        const savedFilters = localStorage.getItem("pmHistoryFilters");
-        if (savedFilters) {
-            try {
-                const p = JSON.parse(savedFilters);
-                if (p.year) setSelectedYear(p.year);
-                // Only restore navigation filters if no specific machine ID overrides them later
-                // But since async fetch overrides, we can just set them here.
-                if (p.area) setSelectedArea(p.area);
-                if (p.type) setSelectedType(p.type);
-                // We typically don't restore machineId if URL param 'machineId' exists and is valid
-                // But if the URL param is invalid (e.g. 'all'), we might want to?
-                // For now, let's restore it, and let the initialMachineId logic override if successful.
-                if (p.machineId && p.machineId !== initialMachineId) {
-                    // Only set if different, but actually checking !initialMachineId is safer for "Generic" view
-                    // But this page requires [machineId] param.
-                }
-            } catch (e) {
-                console.error("Failed to load filters", e);
-            }
-        }
-        setIsLoaded(true);
-    }, []);
 
-    // Save filters to localStorage including selectedMachineId
-    // Save filters to localStorage including selectedMachineId
-    useEffect(() => {
-        if (!isLoaded) return;
-        const filters = {
-            year: selectedYear,
-            area: selectedArea,
-            type: selectedType,
-            machineId: selectedMachineId
-        };
-        localStorage.setItem("pmHistoryFilters", JSON.stringify(filters));
-    }, [selectedYear, selectedArea, selectedType, selectedMachineId, isLoaded]);
 
     const fetchHistory = () => {
         setLoading(true);
@@ -495,30 +459,33 @@ export default function PMHistoryPage() {
         setMoreDetailTopics(Array.from(detailsMap.values()).sort((a, b) => a.order - b.order));
 
         setSubItemTopics([
-            ...Array.from(detailSubItemsMap.values()).sort((a, b) => a.order - b.order),
-            ...Array.from(checklistSubItemsMap.values()).sort((a, b) => a.order - b.order)
-        ]);
+            ...Array.from(detailSubItemsMap.values()),
+            ...Array.from(checklistSubItemsMap.values())
+        ].sort((a, b) => a.order - b.order));
     };
 
     const getValue = (record: PMRecord, topic: string, isActualSubItem: boolean = false) => {
         // isActualSubItem indicates if this topic comes from subItemTopics array (true sub-items with subItemName in DB)
 
         const detail = record.details.find((d: any) => {
-            const resolvedTopic = d.masterChecklist?.topic || d.topic;
-
             if (isActualSubItem) {
                 // For actual Sub-Item (from subItemTopics): match "baseTopic : subItemName" format
-                const [baseTopic, subItemName] = topic.split(' : ');
-                const detailBaseTopic = resolvedTopic?.split(' : ')[0] || resolvedTopic;
+                const parts = topic.split(' : ');
+                const baseTopic = parts[0];
+                const subItemName = parts.slice(1).join(' : '); // Handle case where subItemName contains ' : '
 
-                // Must have subItemName in detail for it to be a sub-item match
+                // Get the base topic from masterChecklist or from topic field
+                const masterTopic = d.masterChecklist?.topic;
+                const detailBaseTopic = masterTopic || (d.topic?.split(' : ')[0]);
+
+                // Match by: 1) d.subItemName matches AND 2) base topic matches
                 return d.subItemName &&
-                    (detailBaseTopic === baseTopic || resolvedTopic === baseTopic) &&
-                    d.subItemName === subItemName;
+                    d.subItemName === subItemName &&
+                    (detailBaseTopic === baseTopic || masterTopic === baseTopic);
             }
 
-            // For regular topics (including those with " : " in name like "Check Gap Argon Cover Fixture : 1")
-            // Match by exact topic name and ensure it's NOT a sub-item detail
+            // For regular topics: match exact topic and ensure NOT a sub-item detail
+            const resolvedTopic = d.masterChecklist?.topic || d.topic;
             return resolvedTopic === topic && !d.subItemName;
         });
 
@@ -548,17 +515,21 @@ export default function PMHistoryPage() {
         // isActualSubItem indicates if this topic comes from subItemTopics array
 
         const detail = record.details.find((d: any) => {
-            const resolvedTopic = d.masterChecklist?.topic || d.topic;
-
             if (isActualSubItem) {
                 // For actual Sub-Item: match "baseTopic : subItemName" format
-                const [baseTopic, subItemName] = topic.split(' : ');
-                const detailBaseTopic = resolvedTopic?.split(' : ')[0] || resolvedTopic;
+                const parts = topic.split(' : ');
+                const baseTopic = parts[0];
+                const subItemName = parts.slice(1).join(' : ');
+
+                const masterTopic = d.masterChecklist?.topic;
+                const detailBaseTopic = masterTopic || (d.topic?.split(' : ')[0]);
+
                 return d.subItemName &&
-                    (detailBaseTopic === baseTopic || resolvedTopic === baseTopic) &&
-                    d.subItemName === subItemName;
+                    d.subItemName === subItemName &&
+                    (detailBaseTopic === baseTopic || masterTopic === baseTopic);
             }
             // For regular topics: match exact topic and ensure NOT a sub-item detail
+            const resolvedTopic = d.masterChecklist?.topic || d.topic;
             return resolvedTopic === topic && !d.subItemName;
         });
 
@@ -660,17 +631,21 @@ export default function PMHistoryPage() {
         // isActualSubItem indicates if this topic comes from subItemTopics array
 
         const detail = record.details.find((d: any) => {
-            const resolvedTopic = d.masterChecklist?.topic || d.topic;
-
             if (isActualSubItem) {
                 // For actual Sub-Item: match "baseTopic : subItemName" format
-                const [baseTopic, subItemName] = topic.split(' : ');
-                const detailBaseTopic = resolvedTopic?.split(' : ')[0] || resolvedTopic;
+                const parts = topic.split(' : ');
+                const baseTopic = parts[0];
+                const subItemName = parts.slice(1).join(' : ');
+
+                const masterTopic = d.masterChecklist?.topic;
+                const detailBaseTopic = masterTopic || (d.topic?.split(' : ')[0]);
+
                 return d.subItemName &&
-                    (detailBaseTopic === baseTopic || resolvedTopic === baseTopic) &&
-                    d.subItemName === subItemName;
+                    d.subItemName === subItemName &&
+                    (detailBaseTopic === baseTopic || masterTopic === baseTopic);
             }
             // For regular topics: match exact topic and ensure NOT a sub-item detail
+            const resolvedTopic = d.masterChecklist?.topic || d.topic;
             return resolvedTopic === topic && !d.subItemName;
         });
 
@@ -691,7 +666,23 @@ export default function PMHistoryPage() {
         // If status is already 'COMPLETED' or 'CHECKED', we might want to override based on content?
         // User request: "Completed when all pass, if not pass show CHECKED (NG)"
         // We check if ANY detail is NG.
-        const hasNG = record.details.some(d => !d.isPass);
+        // [FIX] Skip "ghost items" - NUMERIC details with no value should not count as NG
+        const hasNG = record.details.some(d => {
+            // Skip if isPass is already true
+            if (d.isPass) return false;
+
+            // Get the type from masterChecklist or checklist
+            const type = (d.masterChecklist?.type || d.checklist?.type || '').toUpperCase();
+
+            // For NUMERIC type: skip if value is empty (not filled in = ghost item)
+            if (type === 'NUMERIC' && (!d.value || d.value.trim() === '')) {
+                return false;
+            }
+
+            // For other types or NUMERIC with value, check isPass
+            return !d.isPass;
+        });
+
         if (hasNG) return 'CHECKED (NG)';
         return 'COMPLETED'; // Or 'CHECKED (ALL OK)'? User said "completed เมื่อทุกอัน ผ่านหมด".
     };

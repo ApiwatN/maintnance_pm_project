@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>คู่มือระบบบริหารจัดการการบำรุงรักษาเชิงป้องกัน v1.0.0</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Sarabun', 'TH Sarabun New', sans-serif;
+            font-size: 14pt;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+        }
+        
+        .document {
+            max-width: 210mm;
+            margin: 0 auto;
+            background: white;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        
+        .page {
+            width: 210mm;
+            min-height: 297mm;
+            padding: 25mm;
+            page-break-after: always;
+            position: relative;
+        }
+        
+        .page:last-child {
+            page-break-after: auto;
+        }
+        
+        /* Cover Page */
+        .cover-page {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
+            color: white;
+        }
+        
+        .cover-title {
+            font-size: 28pt;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+        
+        .cover-subtitle {
+            font-size: 22pt;
+            font-weight: 600;
+            margin-bottom: 30px;
+            color: #90cdf4;
+        }
+        
+        .cover-english {
+            font-size: 16pt;
+            margin-bottom: 60px;
+            color: #e2e8f0;
+        }
+        
+        .cover-version {
+            font-size: 18pt;
+            margin-bottom: 20px;
+        }
+        
+        .cover-date {
+            font-size: 14pt;
+            margin-bottom: 10px;
+        }
+        
+        .cover-author {
+            font-size: 14pt;
+            margin-bottom: 80px;
+        }
+        
+        .cover-footer {
+            position: absolute;
+            bottom: 40mm;
+            text-align: center;
+            font-size: 11pt;
+            color: #a0aec0;
+        }
+        
+        /* Headers */
+        h1 {
+            font-size: 22pt;
+            color: #1a365d;
+            border-bottom: 3px solid #2c5282;
+            padding-bottom: 10px;
+            margin: 30px 0 20px 0;
+        }
+        
+        h2 {
+            font-size: 18pt;
+            color: #2c5282;
+            margin: 25px 0 15px 0;
+        }
+        
+        h3 {
+            font-size: 15pt;
+            color: #4a5568;
+            margin: 20px 0 10px 0;
+        }
+        
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            font-size: 12pt;
+        }
+        
+        th, td {
+            border: 1px solid #e2e8f0;
+            padding: 10px 12px;
+            text-align: left;
+        }
+        
+        th {
+            background: #2c5282;
+            color: white;
+            font-weight: 600;
+        }
+        
+        tr:nth-child(even) {
+            background: #f7fafc;
+        }
+        
+        /* Info box */
+        .info-box {
+            background: #ebf8ff;
+            border-left: 4px solid #3182ce;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        
+        .warning-box {
+            background: #fffbeb;
+            border-left: 4px solid #d69e2e;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        
+        /* TOC */
+        .toc {
+            padding: 20px 0;
+        }
+        
+        .toc-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px dotted #ccc;
+        }
+        
+        .toc-section {
+            font-weight: 700;
+            color: #1a365d;
+            margin-top: 15px;
+        }
+        
+        /* Document info table */
+        .doc-info {
+            margin: 30px 0;
+        }
+        
+        .doc-info th {
+            width: 40%;
+            background: #4a5568;
+        }
+        
+        /* Approval table */
+        .approval-table td:nth-child(4),
+        .approval-table td:nth-child(5) {
+            width: 100px;
+        }
+        
+        /* Print styles */
+        @media print {
+            body {
+                background: white;
+            }
+            
+            .document {
+                box-shadow: none;
+            }
+            
+            .page {
+                margin: 0;
+                padding: 20mm;
+            }
+            
+            .cover-page {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            
+            th {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
+        
+        /* Page number */
+        .page-number {
+            position: absolute;
+            bottom: 15mm;
+            right: 25mm;
+            font-size: 11pt;
+            color: #718096;
+        }
+        
+        /* Code block */
+        code {
+            background: #edf2f7;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', monospace;
+            font-size: 11pt;
+        }
+        
+        pre {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-size: 11pt;
+        }
+        
+        pre code {
+            background: none;
+            padding: 0;
+            color: inherit;
+        }
+        
+        /* Lists */
+        ul, ol {
+            margin: 10px 0 10px 25px;
+        }
+        
+        li {
+            margin: 5px 0;
+        }
+        
+        /* Paragraph */
+        p {
+            margin: 10px 0;
+            text-align: justify;
+        }
+        
+        /* Strong emphasis */
+        strong {
+            font-weight: 700;
+        }
+    </style>
+</head>
+<body>
+    <div class="document">
+        <!-- Cover Page -->
+        <div class="page cover-page">
+            <div class="cover-title">คู่มือระบบบริหารจัดการ</div>
+            <div class="cover-title">การบำรุงรักษาเชิงป้องกัน</div>
+            <div class="cover-english">Preventive Maintenance Management System</div>
+            
+            <div class="cover-version">เวอร์ชัน 1.0.0</div>
+            <div class="cover-date">วันที่จัดทำ: 10 มกราคม พ.ศ. 2569</div>
+            <div class="cover-author">จัดทำโดย: ทีมพัฒนาระบบสารสนเทศ</div>
+            
+            <div class="cover-footer">
+                <p>ลิขสิทธิ์ © พ.ศ. 2569</p>
+                <p>เอกสารนี้เป็นความลับขององค์กร</p>
+                <p>ห้ามทำซ้ำ ดัดแปลง หรือเผยแพร่โดยไม่ได้รับอนุญาต</p>
+            </div>
+        </div>
+        
+        <!-- Document Info Page -->
+        <div class="page">
+            <h1>ข้อมูลเอกสาร</h1>
+            
+            <table class="doc-info">
+                <tr><th>ชื่อเอกสาร</th><td>คู่มือระบบบริหารจัดการการบำรุงรักษาเชิงป้องกัน</td></tr>
+                <tr><th>รหัสเอกสาร</th><td>PM-DOC-MASTER-001</td></tr>
+                <tr><th>เวอร์ชัน</th><td>1.0.0</td></tr>
+                <tr><th>วันที่จัดทำ</th><td>10 มกราคม พ.ศ. 2569</td></tr>
+                <tr><th>ปรับปรุงล่าสุด</th><td>10 มกราคม พ.ศ. 2569</td></tr>
+                <tr><th>สถานะ</th><td>เผยแพร่ (Released)</td></tr>
+                <tr><th>ระดับความลับ</th><td>เอกสารภายในองค์กร</td></tr>
+            </table>
+            
+            <h2>ประวัติการแก้ไข</h2>
+            <table>
+                <tr>
+                    <th>เวอร์ชัน</th>
+                    <th>วันที่</th>
+                    <th>ผู้แก้ไข</th>
+                    <th>รายละเอียดการแก้ไข</th>
+                </tr>
+                <tr>
+                    <td>1.0.0</td>
+                    <td>10/01/2569</td>
+                    <td>ทีมพัฒนาระบบ</td>
+                    <td>เอกสารฉบับแรก - ครอบคลุมทุกส่วนงาน</td>
+                </tr>
+            </table>
+            
+            <h2>ผู้อนุมัติเอกสาร</h2>
+            <table class="approval-table">
+                <tr>
+                    <th>ลำดับ</th>
+                    <th>ชื่อ-นามสกุล</th>
+                    <th>ตำแหน่ง</th>
+                    <th>ลายมือชื่อ</th>
+                    <th>วันที่</th>
+                </tr>
+                <tr>
+                    <td>1</td>
+                    <td></td>
+                    <td>ผู้จัดการโครงการ</td>
+                    <td></td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <td>2</td>
+                    <td></td>
+                    <td>ผู้จัดการฝ่ายบำรุงรักษา</td>
+                    <td></td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <td>3</td>
+                    <td></td>
+                    <td>ผู้จัดการฝ่ายเทคโนโลยีสารสนเทศ</td>
+                    <td></td>
+                    <td></td>
+                </tr>
+            </table>
+            
+            <span class="page-number">หน้า 1</span>
+        </div>
+        
+        <!-- Table of Contents -->
+        <div class="page">
+            <h1>สารบัญ</h1>
+            
+            <div class="toc">
+                <div class="toc-item toc-section">ส่วนที่ 1: บทนำ</div>
+                <div class="toc-item"><span>1.1 ที่มาและความสำคัญ</span><span>3</span></div>
+                <div class="toc-item"><span>1.2 วัตถุประสงค์ของระบบ</span><span>3</span></div>
+                <div class="toc-item"><span>1.3 ขอบเขตของระบบ</span><span>4</span></div>
+                <div class="toc-item"><span>1.4 กลุ่มผู้ใช้งานและสิทธิ์การเข้าถึง</span><span>4</span></div>
+                
+                <div class="toc-item toc-section">ส่วนที่ 2: คู่มือการใช้งานสำหรับผู้ใช้ทั่วไป</div>
+                <div class="toc-item"><span>2.1 การเข้าสู่ระบบ</span><span>5</span></div>
+                <div class="toc-item"><span>2.2 หน้าหลัก (Dashboard)</span><span>5</span></div>
+                <div class="toc-item"><span>2.3 การดำเนินการบำรุงรักษา</span><span>6</span></div>
+                <div class="toc-item"><span>2.4 ประวัติการบำรุงรักษา</span><span>7</span></div>
+                <div class="toc-item"><span>2.5 ปฏิทินกำหนดการ</span><span>7</span></div>
+                <div class="toc-item"><span>2.6 รายงาน</span><span>8</span></div>
+                
+                <div class="toc-item toc-section">ส่วนที่ 3: คู่มือสำหรับผู้ดูแลระบบ</div>
+                <div class="toc-item"><span>3.1 การจัดการผู้ใช้งาน</span><span>9</span></div>
+                <div class="toc-item"><span>3.2 การจัดการข้อมูลหลัก</span><span>10</span></div>
+                <div class="toc-item"><span>3.3 การจัดการแผนบำรุงรักษา</span><span>11</span></div>
+                
+                <div class="toc-item toc-section">ส่วนที่ 4: คู่มือการติดตั้งและตั้งค่าระบบ</div>
+                <div class="toc-item"><span>4.1 ความต้องการของระบบ</span><span>12</span></div>
+                <div class="toc-item"><span>4.2 การติดตั้งซอฟต์แวร์</span><span>12</span></div>
+                <div class="toc-item"><span>4.3 การตั้งค่าสภาพแวดล้อม</span><span>13</span></div>
+                
+                <div class="toc-item toc-section">ส่วนที่ 5: เอกสารอ้างอิงทางเทคนิค</div>
+                <div class="toc-item"><span>5.1 โครงสร้างฐานข้อมูล</span><span>14</span></div>
+                <div class="toc-item"><span>5.2 ข้อกำหนด API</span><span>15</span></div>
+                
+                <div class="toc-item toc-section">ส่วนที่ 6: การแก้ไขปัญหาที่พบบ่อย</div>
+                <div class="toc-item"><span>6.1-6.4 ปัญหาและวิธีแก้ไข</span><span>16</span></div>
+                
+                <div class="toc-item toc-section">ส่วนที่ 7: บันทึกการเปลี่ยนแปลง</div>
+                <div class="toc-item"><span>7.1 เวอร์ชัน 1.0.0</span><span>18</span></div>
+                
+                <div class="toc-item toc-section">ภาคผนวก</div>
+                <div class="toc-item"><span>ก. คำศัพท์และคำย่อ</span><span>19</span></div>
+                <div class="toc-item"><span>ข. ค่ามาตรฐานในระบบ</span><span>19</span></div>
+            </div>
+            
+            <span class="page-number">หน้า 2</span>
+        </div>
+        
+        <!-- Part 1: Introduction -->
+        <div class="page">
+            <h1>ส่วนที่ 1: บทนำ</h1>
+            
+            <h2>1.1 ที่มาและความสำคัญ</h2>
+            
+            <p>การบำรุงรักษาเชิงป้องกัน (Preventive Maintenance: PM) เป็นกระบวนการสำคัญในการรักษาสภาพและประสิทธิภาพของเครื่องจักรในโรงงานอุตสาหกรรม การดำเนินการบำรุงรักษาอย่างเป็นระบบช่วยลดความเสี่ยงในการหยุดชะงักของกระบวนการผลิต ลดค่าใช้จ่ายในการซ่อมแซมฉุกเฉิน และยืดอายุการใช้งานของเครื่องจักร</p>
+            
+            <p>ในอดีต การจัดการบำรุงรักษาเชิงป้องกันมักดำเนินการด้วยระบบเอกสารกระดาษหรือตารางคำนวณ (Spreadsheet) ซึ่งมีข้อจำกัดหลายประการ ได้แก่:</p>
+            
+            <ul>
+                <li><strong>ความยากในการติดตามสถานะ:</strong> ไม่สามารถติดตามสถานะการบำรุงรักษาได้แบบทันท่วงที</li>
+                <li><strong>การสูญหายของข้อมูล:</strong> เอกสารกระดาษมีความเสี่ยงในการสูญหายหรือเสียหาย</li>
+                <li><strong>ความล่าช้าในการรายงาน:</strong> การรวบรวมข้อมูลและจัดทำรายงานใช้เวลามาก</li>
+                <li><strong>ข้อผิดพลาดจากการบันทึกข้อมูลด้วยมือ:</strong> เกิดความคลาดเคลื่อนในการบันทึกและคำนวณ</li>
+            </ul>
+            
+            <p><strong>ระบบบริหารจัดการการบำรุงรักษาเชิงป้องกัน (Preventive Maintenance Management System)</strong> ได้รับการพัฒนาขึ้นเพื่อแก้ไขปัญหาดังกล่าว โดยนำเทคโนโลยีสารสนเทศมาประยุกต์ใช้ในการจัดการกระบวนการบำรุงรักษาอย่างมีประสิทธิภาพ</p>
+            
+            <h2>1.2 วัตถุประสงค์ของระบบ</h2>
+            
+            <p>ระบบนี้ได้รับการพัฒนาขึ้นโดยมีวัตถุประสงค์หลักดังต่อไปนี้:</p>
+            
+            <ol>
+                <li><strong>เพิ่มประสิทธิภาพในการจัดการบำรุงรักษา</strong> - ระบบช่วยวางแผนและกำหนดตารางการบำรุงรักษาอัตโนมัติ พร้อมแจ้งเตือนก่อนถึงกำหนดการ</li>
+                <li><strong>รวบรวมข้อมูลอย่างเป็นระบบ</strong> - บันทึกผลการบำรุงรักษาในฐานข้อมูลส่วนกลาง สามารถเรียกดูประวัติย้อนหลังได้ทันที</li>
+                <li><strong>ลดความผิดพลาดจากการทำงานด้วยมือ</strong> - ระบบคำนวณวันที่บำรุงรักษาถัดไปอัตโนมัติ และตรวจสอบค่าที่บันทึกกับเกณฑ์มาตรฐานอัตโนมัติ</li>
+                <li><strong>สนับสนุนการตัดสินใจของผู้บริหาร</strong> - จัดทำรายงานและสถิติเพื่อการวิเคราะห์ แสดงสถานะรวมของเครื่องจักรทั้งหมดในหน้าเดียว</li>
+                <li><strong>เพิ่มความโปร่งใสและตรวจสอบได้</strong> - ระบบบันทึกผู้ดำเนินการและเวลาการทำงาน สามารถส่งออกข้อมูลเพื่อการตรวจสอบได้</li>
+            </ol>
+            
+            <span class="page-number">หน้า 3</span>
+        </div>
+        
+        <!-- Part 1 continued -->
+        <div class="page">
+            <h2>1.3 ขอบเขตของระบบ</h2>
+            
+            <p>ระบบนี้ครอบคลุมการทำงานในส่วนต่าง ๆ ดังนี้:</p>
+            
+            <table>
+                <tr>
+                    <th>หมวด</th>
+                    <th>ฟังก์ชันการทำงาน</th>
+                </tr>
+                <tr>
+                    <td><strong>การจัดการข้อมูลหลัก</strong></td>
+                    <td>พื้นที่ (Areas), ประเภทเครื่องจักร (Machine Types), ข้อมูลเครื่องจักร (Machines)</td>
+                </tr>
+                <tr>
+                    <td><strong>การจัดการแผนบำรุงรักษา</strong></td>
+                    <td>ประเภทการบำรุงรักษา (Preventive Types), รายการตรวจสอบ (Checklists), แผน PM</td>
+                </tr>
+                <tr>
+                    <td><strong>การดำเนินการบำรุงรักษา</strong></td>
+                    <td>บันทึกผลการตรวจสอบ, ถ่ายภาพประกอบ, เลื่อนกำหนดการ</td>
+                </tr>
+                <tr>
+                    <td><strong>การติดตามและรายงาน</strong></td>
+                    <td>แดชบอร์ด (Dashboard), ปฏิทิน (Calendar), รายงาน (Reports), การวิเคราะห์</td>
+                </tr>
+                <tr>
+                    <td><strong>การจัดการผู้ใช้งาน</strong></td>
+                    <td>บัญชีผู้ใช้, สิทธิ์การเข้าถึง, การมอบหมายเครื่องจักร</td>
+                </tr>
+            </table>
+            
+            <h2>1.4 กลุ่มผู้ใช้งานและสิทธิ์การเข้าถึง</h2>
+            
+            <h3>1.4.1 ประเภทผู้ใช้งาน</h3>
+            
+            <table>
+                <tr>
+                    <th>ประเภท</th>
+                    <th>บทบาท</th>
+                    <th>สิทธิ์การเข้าถึง</th>
+                </tr>
+                <tr>
+                    <td><strong>ผู้ดูแลระบบ (Administrator)</strong></td>
+                    <td>บริหารจัดการระบบทั้งหมด</td>
+                    <td>เข้าถึงได้ทุกฟังก์ชัน</td>
+                </tr>
+                <tr>
+                    <td><strong>ผู้ปฏิบัติงานบำรุงรักษา</strong></td>
+                    <td>ดำเนินการบำรุงรักษาตามที่ได้รับมอบหมาย</td>
+                    <td>ดำเนินการบำรุงรักษาเครื่องจักรที่ได้รับมอบหมาย</td>
+                </tr>
+                <tr>
+                    <td><strong>ผู้ควบคุมตารางเวลา</strong></td>
+                    <td>จัดตารางการบำรุงรักษา</td>
+                    <td>เลื่อนกำหนดการบำรุงรักษา</td>
+                </tr>
+                <tr>
+                    <td><strong>ผู้ปฏิบัติงานเต็มสิทธิ์</strong></td>
+                    <td>ทำได้ทั้งสองหน้าที่</td>
+                    <td>ดำเนินการและเลื่อนกำหนดการ</td>
+                </tr>
+            </table>
+            
+            <h3>1.4.2 บทบาทในการดำเนินงาน</h3>
+            
+            <table>
+                <tr>
+                    <th>บทบาท</th>
+                    <th>หน้าที่</th>
+                </tr>
+                <tr>
+                    <td><strong>ผู้ตรวจสอบ (Inspector)</strong></td>
+                    <td>ดำเนินการตรวจสอบและบำรุงรักษา</td>
+                </tr>
+                <tr>
+                    <td><strong>ผู้ตรวจรับ (Checker)</strong></td>
+                    <td>ตรวจรับผลงานการบำรุงรักษา</td>
+                </tr>
+                <tr>
+                    <td><strong>ทั้งสองบทบาท (Both)</strong></td>
+                    <td>ดำเนินการได้ทั้งตรวจสอบและตรวจรับ</td>
+                </tr>
+            </table>
+            
+            <span class="page-number">หน้า 4</span>
+        </div>
+        
+        <!-- Part 2: User Manual -->
+        <div class="page">
+            <h1>ส่วนที่ 2: คู่มือการใช้งานสำหรับผู้ใช้ทั่วไป</h1>
+            
+            <h2>2.1 การเข้าสู่ระบบ</h2>
+            
+            <h3>2.1.1 การเข้าถึงระบบ</h3>
+            <p>เปิดโปรแกรมเว็บเบราว์เซอร์ (แนะนำ Google Chrome หรือ Microsoft Edge) และไปยังที่อยู่ URL ที่กำหนดโดยผู้ดูแลระบบ</p>
+            
+            <h3>2.1.2 ขั้นตอนการเข้าสู่ระบบ</h3>
+            <ol>
+                <li>กรอกชื่อผู้ใช้ (Username) ในช่องที่กำหนด</li>
+                <li>กรอกรหัสผ่าน (Password) ในช่องที่กำหนด</li>
+                <li>กดปุ่ม <strong>"เข้าสู่ระบบ"</strong> (Sign In)</li>
+                <li>หากข้อมูลถูกต้อง ระบบจะนำท่านไปยังหน้าหลัก (Dashboard)</li>
+            </ol>
+            
+            <div class="info-box">
+                <strong>หมายเหตุ:</strong> เพื่อความปลอดภัย กรุณาออกจากระบบทุกครั้งหลังเสร็จสิ้นการใช้งาน
+            </div>
+            
+            <h2>2.2 หน้าหลัก (Dashboard)</h2>
+            
+            <p>หน้าหลักแสดงภาพรวมสถานะของเครื่องจักรและการบำรุงรักษาทั้งหมด</p>
+            
+            <h3>2.2.1 ส่วนประกอบหลัก</h3>
+            
+            <table>
+                <tr>
+                    <th>ส่วนประกอบ</th>
+                    <th>รายละเอียด</th>
+                </tr>
+                <tr>
+                    <td><strong>ตัวกรองข้อมูล</strong></td>
+                    <td>กรองข้อมูลตามพื้นที่ ประเภทเครื่อง ชื่อเครื่อง และประเภทการบำรุงรักษา</td>
+                </tr>
+                <tr>
+                    <td><strong>การ์ดสรุปสถานะ</strong></td>
+                    <td>แสดงจำนวนเครื่องจักร จำนวนรายการบำรุงรักษา สถานะต่าง ๆ</td>
+                </tr>
+                <tr>
+                    <td><strong>ตารางสถานะเครื่องจักร</strong></td>
+                    <td>แสดงรายละเอียดสถานะของเครื่องจักรแต่ละเครื่อง</td>
+                </tr>
+            </table>
+            
+            <h3>2.2.2 ความหมายของสถานะ</h3>
+            
+            <table>
+                <tr>
+                    <th>สถานะ</th>
+                    <th>ความหมาย</th>
+                </tr>
+                <tr>
+                    <td><strong>Completed (สำเร็จ)</strong></td>
+                    <td>ดำเนินการบำรุงรักษาครั้งล่าสุดเรียบร้อยแล้ว ผลการตรวจสอบผ่านทุกรายการ</td>
+                </tr>
+                <tr>
+                    <td><strong>Checked (NG)</strong></td>
+                    <td>ดำเนินการบำรุงรักษาแล้ว แต่ผลการตรวจสอบบางรายการไม่ผ่านเกณฑ์</td>
+                </tr>
+                <tr>
+                    <td><strong>Upcoming</strong></td>
+                    <td>ใกล้ถึงกำหนดการบำรุงรักษา (ภายในจำนวนวันที่กำหนดแจ้งเตือน)</td>
+                </tr>
+                <tr>
+                    <td><strong>Overdue</strong></td>
+                    <td>เกินกำหนดการบำรุงรักษาแล้ว ต้องดำเนินการโดยเร็ว</td>
+                </tr>
+            </table>
+            
+            <span class="page-number">หน้า 5</span>
+        </div>
+        
+        <!-- Part 2 continued -->
+        <div class="page">
+            <h2>2.3 การดำเนินการบำรุงรักษา (PM Inspection)</h2>
+            
+            <h3>2.3.1 การเข้าถึงหน้าบันทึกผลการบำรุงรักษา</h3>
+            <ol>
+                <li>จากหน้าหลัก คลิกปุ่ม <strong>"ตรวจสอบ"</strong> (Inspect) ที่เครื่องจักรที่ต้องการ</li>
+                <li>ระบบจะแสดงหน้าบันทึกผลการบำรุงรักษา</li>
+            </ol>
+            
+            <h3>2.3.2 การกรอกรายการตรวจสอบ</h3>
+            
+            <table>
+                <tr>
+                    <th>ประเภทรายการ</th>
+                    <th>วิธีการบันทึก</th>
+                </tr>
+                <tr>
+                    <td><strong>แบบเลือกผ่าน/ไม่ผ่าน (Boolean)</strong></td>
+                    <td>คลิกปุ่ม "ผ่าน" (OK) หรือ "ไม่ผ่าน" (NG)</td>
+                </tr>
+                <tr>
+                    <td><strong>แบบค่าตัวเลข (Numeric)</strong></td>
+                    <td>กรอกค่าตัวเลขที่วัดได้ ระบบจะตรวจสอบกับเกณฑ์ที่กำหนดอัตโนมัติ</td>
+                </tr>
+            </table>
+            
+            <h3>2.3.3 การถ่ายภาพประกอบ</h3>
+            <ol>
+                <li>คลิกไอคอนกล้องที่รายการที่ต้องการ</li>
+                <li>เลือก <strong>"ภาพก่อนดำเนินการ"</strong> หรือ <strong>"ภาพหลังดำเนินการ"</strong></li>
+                <li>ถ่ายภาพหรือเลือกภาพจากแกลเลอรี</li>
+                <li>ภาพจะถูกบันทึกพร้อมกับผลการตรวจสอบ</li>
+            </ol>
+            
+            <h3>2.3.4 การบันทึกผล</h3>
+            <ol>
+                <li>ตรวจสอบว่ากรอกรายการตรวจสอบครบถ้วน</li>
+                <li>กรอกชื่อผู้ตรวจสอบ (Inspector) ในช่องที่กำหนด</li>
+                <li>กรอกชื่อผู้ตรวจรับ (Checker) หากมี</li>
+                <li>เพิ่มหมายเหตุเพิ่มเติมหากจำเป็น</li>
+                <li>กดปุ่ม <strong>"บันทึก"</strong> เพื่อบันทึกผลการบำรุงรักษา</li>
+            </ol>
+            
+            <h2>2.4 ประวัติการบำรุงรักษา (PM History)</h2>
+            
+            <h3>2.4.1 การเข้าถึง</h3>
+            <p>จากหน้าหลัก คลิกปุ่ม <strong>"ประวัติ"</strong> (History) ที่เครื่องจักรที่ต้องการดูประวัติ</p>
+            
+            <h3>2.4.2 การส่งออกข้อมูล</h3>
+            
+            <table>
+                <tr>
+                    <th>รูปแบบ</th>
+                    <th>วิธีการ</th>
+                </tr>
+                <tr>
+                    <td><strong>Excel</strong></td>
+                    <td>คลิกปุ่ม "ส่งออก Excel" เพื่อดาวน์โหลดไฟล์ .xlsx</td>
+                </tr>
+                <tr>
+                    <td><strong>PDF</strong></td>
+                    <td>คลิกปุ่ม "ส่งออก PDF" เพื่อดาวน์โหลดไฟล์ .pdf</td>
+                </tr>
+            </table>
+            
+            <span class="page-number">หน้า 6</span>
+        </div>
+        
+        <!-- More pages... -->
+        <div class="page">
+            <h2>2.5 ปฏิทินกำหนดการ (Calendar)</h2>
+            
+            <h3>2.5.1 การอ่านปฏิทิน</h3>
+            
+            <table>
+                <tr>
+                    <th>สี</th>
+                    <th>ความหมาย</th>
+                </tr>
+                <tr>
+                    <td><strong>เขียว</strong></td>
+                    <td>การบำรุงรักษาที่ดำเนินการเสร็จสิ้นแล้ว</td>
+                </tr>
+                <tr>
+                    <td><strong>เหลือง</strong></td>
+                    <td>การบำรุงรักษาที่ใกล้ถึงกำหนด</td>
+                </tr>
+                <tr>
+                    <td><strong>แดง</strong></td>
+                    <td>การบำรุงรักษาที่เกินกำหนดแล้ว</td>
+                </tr>
+                <tr>
+                    <td><strong>น้ำเงิน</strong></td>
+                    <td>การบำรุงรักษาที่กำหนดไว้ในอนาคต</td>
+                </tr>
+            </table>
+            
+            <h3>2.5.2 การดำเนินการจากปฏิทิน</h3>
+            <p>คลิกที่รายการในปฏิทินเพื่อเข้าสู่หน้าดำเนินการบำรุงรักษา หรือเลื่อนกำหนดการ (สำหรับผู้ที่มีสิทธิ์)</p>
+            
+            <h2>2.6 รายงาน (Reports)</h2>
+            
+            <h3>2.6.1 การสร้างรายงาน</h3>
+            <ol>
+                <li>ไปที่เมนู <strong>"รายงาน"</strong> (Reports)</li>
+                <li>กำหนดเงื่อนไขการกรองข้อมูล (ช่วงวันที่ เครื่องจักร สถานะ)</li>
+                <li>กดปุ่ม <strong>"แสดงผล"</strong> เพื่อดูรายงาน</li>
+                <li>กดปุ่ม <strong>"ส่งออก"</strong> เพื่อดาวน์โหลดรายงาน</li>
+            </ol>
+            
+            <h1>ส่วนที่ 3: คู่มือสำหรับผู้ดูแลระบบ</h1>
+            
+            <h2>3.1 การจัดการผู้ใช้งาน</h2>
+            
+            <h3>3.1.1 การเข้าถึง</h3>
+            <p>ไปที่เมนู <strong>เครื่องจักร → ผู้ใช้งาน</strong></p>
+            
+            <h3>3.1.2 การสร้างผู้ใช้ใหม่</h3>
+            <ol>
+                <li>กดปุ่ม <strong>"เพิ่มผู้ใช้ใหม่"</strong></li>
+                <li>กรอกข้อมูลตามที่กำหนด:
+                    <ul>
+                        <li>ชื่อ-นามสกุล (จำเป็น)</li>
+                        <li>รหัสพนักงาน</li>
+                        <li>อีเมล</li>
+                        <li>ชื่อผู้ใช้และรหัสผ่าน</li>
+                        <li>บทบาทและสิทธิ์การใช้งาน</li>
+                        <li>เครื่องจักรที่รับผิดชอบ</li>
+                    </ul>
+                </li>
+                <li>กดปุ่ม <strong>"บันทึก"</strong></li>
+            </ol>
+            
+            <div class="warning-box">
+                <strong>ข้อควรระวัง:</strong> การลบผู้ใช้ไม่สามารถกู้คืนได้
+            </div>
+            
+            <span class="page-number">หน้า 7</span>
+        </div>
+        
+        <!-- Technical Reference -->
+        <div class="page">
+            <h1>ส่วนที่ 5: เอกสารอ้างอิงทางเทคนิค</h1>
+            
+            <h2>5.1 โครงสร้างฐานข้อมูล</h2>
+            
+            <h3>5.1.1 สรุปตาราง</h3>
+            
+            <table>
+                <tr>
+                    <th>ตาราง</th>
+                    <th>รายละเอียด</th>
+                </tr>
+                <tr><td><strong>Area</strong></td><td>ข้อมูลพื้นที่ในโรงงาน</td></tr>
+                <tr><td><strong>MachineType</strong></td><td>ประเภทเครื่องจักร</td></tr>
+                <tr><td><strong>MachineMaster</strong></td><td>Template เครื่องจักร</td></tr>
+                <tr><td><strong>Machine</strong></td><td>ข้อมูลเครื่องจักร</td></tr>
+                <tr><td><strong>PreventiveType</strong></td><td>ประเภทการบำรุงรักษา</td></tr>
+                <tr><td><strong>MasterChecklist</strong></td><td>รายการตรวจสอบมาตรฐาน</td></tr>
+                <tr><td><strong>MachinePMPlan</strong></td><td>แผนบำรุงรักษาของเครื่องจักร</td></tr>
+                <tr><td><strong>PMRecord</strong></td><td>บันทึกการบำรุงรักษา</td></tr>
+                <tr><td><strong>PMRecordDetail</strong></td><td>รายละเอียดการตรวจสอบ</td></tr>
+                <tr><td><strong>UserMaster</strong></td><td>ข้อมูลผู้ใช้งาน</td></tr>
+            </table>
+            
+            <h2>5.2 ข้อกำหนด API</h2>
+            
+            <h3>5.2.1 การยืนยันตัวตน</h3>
+            <p>ทุก API (ยกเว้น Login) ต้องส่ง JWT Token ใน Header:</p>
+            <pre><code>Authorization: Bearer &lt;token&gt;</code></pre>
+            
+            <h3>5.2.2 รายการ API หลัก</h3>
+            
+            <table>
+                <tr>
+                    <th>Method</th>
+                    <th>Endpoint</th>
+                    <th>รายละเอียด</th>
+                </tr>
+                <tr><td>POST</td><td>/api/auth/login</td><td>เข้าสู่ระบบ</td></tr>
+                <tr><td>GET</td><td>/api/auth/me</td><td>ข้อมูลผู้ใช้ปัจจุบัน</td></tr>
+                <tr><td>GET</td><td>/api/dashboard/stats</td><td>สถิติ Dashboard</td></tr>
+                <tr><td>GET</td><td>/api/machines</td><td>รายการเครื่องจักร</td></tr>
+                <tr><td>POST</td><td>/api/pm/record</td><td>บันทึกผลการบำรุงรักษา</td></tr>
+                <tr><td>GET</td><td>/api/pm/schedule</td><td>ตารางการบำรุงรักษา</td></tr>
+            </table>
+            
+            <span class="page-number">หน้า 8</span>
+        </div>
+        
+        <!-- Troubleshooting -->
+        <div class="page">
+            <h1>ส่วนที่ 6: การแก้ไขปัญหาที่พบบ่อย</h1>
+            
+            <h2>6.1 ปัญหาการเข้าสู่ระบบ</h2>
+            
+            <table>
+                <tr>
+                    <th>ปัญหา</th>
+                    <th>สาเหตุ</th>
+                    <th>วิธีแก้ไข</th>
+                </tr>
+                <tr>
+                    <td>"Invalid credentials"</td>
+                    <td>ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง</td>
+                    <td>ตรวจสอบการพิมพ์ ระวัง Caps Lock</td>
+                </tr>
+                <tr>
+                    <td>"Connection Error"</td>
+                    <td>ไม่สามารถเชื่อมต่อ Server ได้</td>
+                    <td>ตรวจสอบการเชื่อมต่อเครือข่าย</td>
+                </tr>
+                <tr>
+                    <td>"Invalid or Expired token"</td>
+                    <td>Token หมดอายุ</td>
+                    <td>ล้าง Cache และเข้าสู่ระบบใหม่</td>
+                </tr>
+            </table>
+            
+            <h2>6.2 ปัญหาข้อมูลไม่แสดง</h2>
+            
+            <table>
+                <tr>
+                    <th>ปัญหา</th>
+                    <th>สาเหตุ</th>
+                    <th>วิธีแก้ไข</th>
+                </tr>
+                <tr>
+                    <td>ไม่เห็นเครื่องจักร</td>
+                    <td>ไม่ได้รับมอบหมาย หรือตัวกรองตั้งค่าผิด</td>
+                    <td>ตรวจสอบตัวกรอง ติดต่อผู้ดูแลระบบ</td>
+                </tr>
+                <tr>
+                    <td>ข้อมูลไม่อัปเดต</td>
+                    <td>Cache ของเบราว์เซอร์</td>
+                    <td>กดปุ่มรีเฟรช หรือกด F5</td>
+                </tr>
+                <tr>
+                    <td>รูปภาพไม่แสดง</td>
+                    <td>ไฟล์ถูกลบหรือ Path ไม่ถูกต้อง</td>
+                    <td>ติดต่อผู้ดูแลระบบ</td>
+                </tr>
+            </table>
+            
+            <h2>6.3 การติดต่อขอความช่วยเหลือ</h2>
+            
+            <p>เมื่อพบปัญหาที่ไม่สามารถแก้ไขได้ด้วยตนเอง กรุณาเตรียมข้อมูลดังนี้:</p>
+            <ul>
+                <li>ชื่อผู้แจ้งและแผนก</li>
+                <li>รายละเอียดปัญหาที่พบ</li>
+                <li>ขั้นตอนที่ทำก่อนเกิดปัญหา</li>
+                <li>ภาพหน้าจอข้อผิดพลาด (ถ้ามี)</li>
+            </ul>
+            
+            <table>
+                <tr>
+                    <th>ช่องทาง</th>
+                    <th>รายละเอียด</th>
+                </tr>
+                <tr>
+                    <td><strong>โทรศัพท์</strong></td>
+                    <td>ภายใน xxxx</td>
+                </tr>
+                <tr>
+                    <td><strong>อีเมล</strong></td>
+                    <td>it-support@company.com</td>
+                </tr>
+            </table>
+            
+            <span class="page-number">หน้า 9</span>
+        </div>
+        
+        <!-- Appendix -->
+        <div class="page">
+            <h1>ภาคผนวก</h1>
+            
+            <h2>ก. คำศัพท์และคำย่อ</h2>
+            
+            <table>
+                <tr>
+                    <th>คำศัพท์</th>
+                    <th>ความหมาย</th>
+                </tr>
+                <tr><td><strong>PM</strong></td><td>Preventive Maintenance - การบำรุงรักษาเชิงป้องกัน</td></tr>
+                <tr><td><strong>Dashboard</strong></td><td>หน้าหลักแสดงภาพรวมข้อมูล</td></tr>
+                <tr><td><strong>Checklist</strong></td><td>รายการตรวจสอบ</td></tr>
+                <tr><td><strong>JWT</strong></td><td>JSON Web Token - มาตรฐานการยืนยันตัวตน</td></tr>
+                <tr><td><strong>API</strong></td><td>Application Programming Interface</td></tr>
+                <tr><td><strong>ORM</strong></td><td>Object-Relational Mapping</td></tr>
+            </table>
+            
+            <h2>ข. ค่ามาตรฐานในระบบ</h2>
+            
+            <h3>System Role</h3>
+            <table>
+                <tr><th>ค่า</th><th>ความหมาย</th></tr>
+                <tr><td>ADMIN</td><td>ผู้ดูแลระบบ</td></tr>
+                <tr><td>USER</td><td>ผู้ใช้งานทั่วไป</td></tr>
+            </table>
+            
+            <h3>Permission Type</h3>
+            <table>
+                <tr><th>ค่า</th><th>ความหมาย</th></tr>
+                <tr><td>PM_ONLY</td><td>ดำเนินการบำรุงรักษาได้อย่างเดียว</td></tr>
+                <tr><td>RESCHEDULE_ONLY</td><td>เลื่อนกำหนดการได้อย่างเดียว</td></tr>
+                <tr><td>PM_AND_RESCHEDULE</td><td>ดำเนินการและเลื่อนกำหนดการได้</td></tr>
+            </table>
+            
+            <h3>User Role</h3>
+            <table>
+                <tr><th>ค่า</th><th>ความหมาย</th></tr>
+                <tr><td>INSPECTOR</td><td>ผู้ตรวจสอบ</td></tr>
+                <tr><td>CHECKER</td><td>ผู้ตรวจรับ</td></tr>
+                <tr><td>BOTH</td><td>ทั้งสองบทบาท</td></tr>
+            </table>
+            
+            <span class="page-number">หน้า 10</span>
+        </div>
+        
+        <!-- Final Page -->
+        <div class="page" style="display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;">
+            <h1 style="border: none; margin-bottom: 50px;">จบเอกสาร</h1>
+            
+            <p style="font-size: 16pt; margin-bottom: 30px;"><strong>คู่มือระบบบริหารจัดการการบำรุงรักษาเชิงป้องกัน</strong></p>
+            <p style="font-size: 14pt; margin-bottom: 50px;">เวอร์ชัน 1.0.0</p>
+            
+            <p style="color: #718096;">ลิขสิทธิ์ © พ.ศ. 2569</p>
+            <p style="color: #718096;">สงวนลิขสิทธิ์ตามกฎหมาย</p>
+        </div>
+    </div>
+    
+    <script>
+        // Print button
+        document.addEventListener('DOMContentLoaded', function() {
+            var printBtn = document.createElement('button');
+            printBtn.textContent = '🖨️ พิมพ์เอกสาร / บันทึกเป็น PDF';
+            printBtn.style.cssText = 'position: fixed; top: 20px; right: 20px; padding: 15px 25px; background: #2c5282; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14pt; font-family: Sarabun, sans-serif; box-shadow: 0 4px 15px rgba(0,0,0,0.2); z-index: 1000;';
+            printBtn.onclick = function() { window.print(); };
+            document.body.appendChild(printBtn);
+        });
+    </script>
+</body>
+</html>
