@@ -201,6 +201,15 @@ model Area {
   machineTypes MachineType[]
 }
 
+model Holiday {
+  id          Int      @id @default(autoincrement())
+  date        DateTime @unique
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 // Update relationships
 // PreventiveType belongs to Area
 // MachineMaster belongs to PreventiveType

@@ -58,6 +58,14 @@ export default function OverallMachinePage() {
         machine: MachineStatus | null;
     }>({ show: false, anchorRect: null, machine: null });
 
+    // Modal state
+    const [showModal, setShowModal] = useState(false);
+    const [modalData, setModalData] = useState<{
+        title: string;
+        items: any[];
+        type: 'ng' | 'upcoming' | 'overdue' | 'total' | 'completed' | null
+    }>({ title: '', items: [], type: null });
+
     const getUserPermission = () => {
         if (!user) return 'PM_ONLY';
         if (user.systemRole === 'ADMIN') return 'PM_AND_RESCHEDULE';
@@ -166,35 +174,54 @@ export default function OverallMachinePage() {
 
     // Initialize Bootstrap tooltips
     useEffect(() => {
-        if (typeof window !== 'undefined' && machines.length > 0) {
-            // Add custom CSS for wider tooltips
-            const style = document.createElement('style');
+        if (typeof window === 'undefined' || machines.length === 0) return;
+
+        let tooltipList: any[] = [];
+
+        // Add custom CSS for wider tooltips
+        let style = document.getElementById('custom-tooltip-style');
+        if (!style) {
+            style = document.createElement('style');
             style.id = 'custom-tooltip-style';
             style.textContent = `
                 .tooltip-inner {
                     max-width: 500px !important;
                     text-align: left !important;
                 }
+                .tooltip {
+                    z-index: 9999 !important;
+                }
             `;
             document.head.appendChild(style);
-
-            // Dynamically import Bootstrap
-            // @ts-expect-error - Bootstrap types not available but works at runtime
-            import('bootstrap').then((bootstrap) => {
-                const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
-                const tooltipList = Array.from(tooltipTriggerList).map(tooltipTriggerEl =>
-                    new bootstrap.Tooltip(tooltipTriggerEl)
-                );
-
-                // Cleanup tooltips on unmount or re-render
-                return () => {
-                    tooltipList.forEach(tooltip => tooltip.dispose());
-                    // Remove custom style
-                    const styleEl = document.getElementById('custom-tooltip-style');
-                    if (styleEl) styleEl.remove();
-                };
-            });
         }
+
+        // Dynamically import Bootstrap
+        // @ts-expect-error - Bootstrap types not available but works at runtime
+        import('bootstrap').then((bootstrap) => {
+            // Dispose existing tooltips first
+            const existingTooltips = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+            existingTooltips.forEach(el => {
+                const existingTooltip = bootstrap.Tooltip.getInstance(el);
+                if (existingTooltip) {
+                    existingTooltip.dispose();
+                }
+            });
+
+            // Create new tooltips with fixed container
+            tooltipList = Array.from(existingTooltips).map(tooltipTriggerEl =>
+                new bootstrap.Tooltip(tooltipTriggerEl, {
+                    container: 'body',
+                    boundary: 'viewport'
+                })
+            );
+        });
+
+        // Cleanup on unmount
+        return () => {
+            tooltipList.forEach(tooltip => {
+                try { tooltip.dispose(); } catch (e) { }
+            });
+        };
     }, [machines]);
 
     useEffect(() => {
@@ -235,6 +262,80 @@ export default function OverallMachinePage() {
             hasNG: filtered.filter(m => m.lastCheckStatus === 'HAS_NG').length
         };
     }, [machines, areaFilter]);
+
+    // Modal stats computation
+    const modalStats = useMemo(() => {
+        const filtered = areaFilter ? machines.filter(m => m.area === areaFilter) : machines;
+        const today = new Date();
+
+        const ngMachines = filtered
+            .filter(m => m.lastCheckStatus === 'HAS_NG')
+            .map(m => ({
+                name: m.name,
+                pmType: m.preventiveType || '-'
+            }));
+
+        const upcomingMachines = filtered
+            .filter(m => m.status === 'UPCOMING')
+            .map(m => ({
+                name: m.name,
+                pmType: m.preventiveType || '-',
+                daysLeft: m.daysUntil
+            }));
+
+        const overdueMachines = filtered
+            .filter(m => m.status === 'OVERDUE')
+            .map(m => ({
+                name: m.name,
+                pmType: m.preventiveType || '-',
+                daysOverdue: Math.abs(m.daysUntil)
+            }));
+
+        const completedMachines = filtered
+            .filter(m => m.status === 'NORMAL' && m.lastCheckStatus !== 'HAS_NG')
+            .map(m => ({
+                name: m.name,
+                pmType: m.preventiveType || '-'
+            }));
+
+        const totalMachines = filtered.map(m => ({
+            name: m.name,
+            model: m.code || '-' // Using code as model proxy or just redundant info
+        }));
+
+        return { ngMachines, upcomingMachines, overdueMachines, completedMachines, totalMachines };
+    }, [machines, areaFilter]);
+
+    const handleShowModal = (type: 'ng' | 'upcoming' | 'overdue' | 'total' | 'completed') => {
+        let items: any[] = [];
+        let title = '';
+
+        if (type === 'ng') {
+            items = modalStats.ngMachines;
+            title = `Checked (NG) (${items.length})`;
+        } else if (type === 'upcoming') {
+            items = modalStats.upcomingMachines;
+            title = `Upcoming (${items.length})`;
+        } else if (type === 'overdue') {
+            items = modalStats.overdueMachines;
+            title = `Overdue (${items.length})`;
+        } else if (type === 'completed') {
+            items = modalStats.completedMachines;
+            title = `Completed (${items.length})`;
+        } else if (type === 'total') {
+            items = modalStats.totalMachines;
+            title = `Total Machines (${items.length})`;
+        }
+
+        if (items.length > 0) {
+            setModalData({ title, items, type });
+            setShowModal(true);
+        }
+    };
+
+    const handleCloseModal = () => {
+        setShowModal(false);
+    };
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -284,7 +385,11 @@ export default function OverallMachinePage() {
                 <div className="col-md-10 ms-auto">
                     <div className="row g-3 justify-content-end">
                         <div className="col-md-2">
-                            <div className="card border-0 shadow-sm bg-primary text-white h-100">
+                            <div
+                                className="card border-0 shadow-sm bg-primary text-white h-100"
+                                style={{ cursor: 'pointer' }}
+                                onClick={() => handleShowModal('total')}
+                            >
                                 <div className="card-body d-flex justify-content-between align-items-center">
                                     <div>
                                         <h6 className="mb-0 text-white-50">Total Machines</h6>
@@ -295,7 +400,11 @@ export default function OverallMachinePage() {
                             </div>
                         </div>
                         <div className="col-md-2">
-                            <div className="card border-0 shadow-sm bg-danger text-white h-100">
+                            <div
+                                className="card border-0 shadow-sm bg-danger text-white h-100"
+                                style={{ cursor: 'pointer' }}
+                                onClick={() => handleShowModal('overdue')}
+                            >
                                 <div className="card-body d-flex justify-content-between align-items-center">
                                     <div>
                                         <h6 className="mb-0 text-white-50">Overdue</h6>
@@ -306,7 +415,11 @@ export default function OverallMachinePage() {
                             </div>
                         </div>
                         <div className="col-md-2">
-                            <div className="card border-0 shadow-sm bg-warning text-dark h-100">
+                            <div
+                                className="card border-0 shadow-sm bg-warning text-dark h-100"
+                                style={{ cursor: 'pointer' }}
+                                onClick={() => handleShowModal('upcoming')}
+                            >
                                 <div className="card-body d-flex justify-content-between align-items-center">
                                     <div>
                                         <h6 className="mb-0 text-black-50">Upcoming</h6>
@@ -317,7 +430,11 @@ export default function OverallMachinePage() {
                             </div>
                         </div>
                         <div className="col-md-2">
-                            <div className="card border-0 shadow-sm bg-success text-white h-100">
+                            <div
+                                className="card border-0 shadow-sm bg-success text-white h-100"
+                                style={{ cursor: 'pointer' }}
+                                onClick={() => handleShowModal('completed')}
+                            >
                                 <div className="card-body d-flex justify-content-between align-items-center">
                                     <div>
                                         <h6 className="mb-0 text-white-50">Completed</h6>
@@ -328,7 +445,11 @@ export default function OverallMachinePage() {
                             </div>
                         </div>
                         <div className="col-md-2">
-                            <div className="card border-0 shadow-sm bg-danger text-white h-100">
+                            <div
+                                className="card border-0 shadow-sm bg-danger text-white h-100"
+                                style={{ cursor: 'pointer' }}
+                                onClick={() => handleShowModal('ng')}
+                            >
                                 <div className="card-body d-flex justify-content-between align-items-center">
                                     <div>
                                         <h6 className="mb-0 text-white-50">Checked (NG)</h6>
@@ -368,11 +489,13 @@ export default function OverallMachinePage() {
                                             {typeMachines.map(machine => {
                                                 const hasNG = machine.lastCheckStatus === 'HAS_NG';
                                                 const allOK = machine.lastCheckStatus === 'ALL_OK';
+                                                const isDueToday = machine.daysUntil === 0;
 
-                                                // Priority: HAS_NG > OVERDUE > ALL_OK > UPCOMING > NORMAL
+                                                // Priority: HAS_NG > OVERDUE > DUE_TODAY > ALL_OK > UPCOMING > NORMAL
                                                 let displayStatus: string = machine.status;
                                                 let color = getStatusColor(machine.status);
                                                 let bgColor = '#ffffff';
+                                                let blinkClass = '';
 
                                                 if (hasNG) {
                                                     displayStatus = 'CHECKED(NG)';
@@ -380,6 +503,12 @@ export default function OverallMachinePage() {
                                                     bgColor = '#ffebee';
                                                 } else if (machine.status === 'OVERDUE') {
                                                     bgColor = '#ffebee';
+                                                } else if (isDueToday) {
+                                                    // PM date is TODAY - show blinking yellow
+                                                    displayStatus = 'DUE TODAY';
+                                                    color = 'warning';
+                                                    bgColor = '#fff8e1';
+                                                    blinkClass = 'blink-warning';
                                                 } else if (allOK) {
                                                     // Only show Checked OK if not upcoming warning? 
                                                     // User wants "Checked(ALL OK)" if Checked. But if UPCOMING?
@@ -430,8 +559,8 @@ export default function OverallMachinePage() {
                                                             data-bs-placement="top"
                                                             title={tooltipContent}
                                                         >
-                                                            <div className={`card h-auto border-${color} shadow-sm position-relative hover-shadow transition-all`} style={{ transition: 'transform 0.2s', cursor: 'pointer' }}>
-                                                                <div className={`card-header bg-${color} text-white py-0 px-1 d-flex justify-content-between align-items-center`} style={{ minHeight: '22px' }}>
+                                                            <div className={`card h-auto border-${color} shadow-sm position-relative hover-shadow transition-all ${blinkClass}`} style={{ transition: 'transform 0.2s', cursor: 'pointer' }}>
+                                                                <div className={`card-header bg-${color} text-white py-0 px-1 d-flex justify-content-between align-items-center ${blinkClass}`} style={{ minHeight: '22px' }}>
                                                                     <span className="fw-bold text-truncate" style={{ fontSize: '0.6rem' }} title={displayStatus}>{displayStatus}</span>
                                                                     {machine.daysUntil !== null && (
                                                                         <span className="badge bg-white text-dark rounded-pill fw-bold border border-secondary" style={{ fontSize: '0.65em', padding: '0.1em 0.4em' }}>
@@ -507,6 +636,44 @@ export default function OverallMachinePage() {
                 onInspect={handlePopoverInspect}
                 onReschedule={handlePopoverReschedule}
             />
+
+            {/* Details Modal */}
+            {showModal && (
+                <div className="modal-overlay" onClick={handleCloseModal}>
+                    <div className="modal-content-custom" onClick={e => e.stopPropagation()}>
+                        <div className={`modal-header-custom ${modalData.type || ''}`}>
+                            <h5 className="mb-0 fw-bold">
+                                {modalData.type === 'ng' && <i className="bi bi-x-circle-fill me-2"></i>}
+                                {modalData.type === 'upcoming' && <i className="bi bi-clock-history me-2"></i>}
+                                {modalData.type === 'overdue' && <i className="bi bi-exclamation-triangle-fill me-2"></i>}
+                                {modalData.type === 'completed' && <i className="bi bi-check-circle-fill me-2"></i>}
+                                {modalData.type === 'total' && <i className="bi bi-hdd-stack me-2"></i>}
+                                {modalData.title}
+                            </h5>
+                            <button onClick={handleCloseModal} className="btn-close-custom" aria-label="Close">
+                                <i className="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                        <div className="modal-body-custom">
+                            <div className="list-group list-group-flush">
+                                {modalData.items.map((m, idx) => (
+                                    <div key={idx} className="list-group-item d-flex justify-content-between align-items-center px-0">
+                                        <div>
+                                            <div className="fw-bold">{m.name}</div>
+                                            {modalData.type !== 'total' && <span className="badge bg-info text-dark small">{m.pmType}</span>}
+                                            {modalData.type === 'total' && <span className="text-muted small">{m.model}</span>}
+                                        </div>
+                                        {modalData.type === 'upcoming' && <span className="badge bg-warning text-dark">อีก {m.daysLeft} วัน</span>}
+                                        {modalData.type === 'overdue' && <span className="badge bg-danger text-white">เกิน {m.daysOverdue} วัน</span>}
+                                        {modalData.type === 'completed' && <i className="bi bi-check-circle-fill text-success fs-5"></i>}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
         </div>
     );
 }

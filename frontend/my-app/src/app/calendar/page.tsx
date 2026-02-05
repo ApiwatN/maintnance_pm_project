@@ -8,6 +8,7 @@ import { useSocket } from "../components/SocketProvider";
 import { useAuth } from "../../context/AuthContext";
 import RescheduleModal from "../components/RescheduleModal";
 import ActionPopover from "../components/ActionPopover";
+import Swal from 'sweetalert2';
 
 interface PMEvent {
     id: string;
@@ -26,6 +27,13 @@ interface PMEvent {
     preventiveType?: { name: string };
 }
 
+interface Holiday {
+    id: number;
+    date: string;
+    name: string;
+    description?: string;
+}
+
 export default function CalendarPage() {
     const { socket } = useSocket();
     const { loading: authLoading, user } = useAuth();
@@ -35,6 +43,19 @@ export default function CalendarPage() {
     const [selectedDateEvents, setSelectedDateEvents] = useState<{ date: Date, events: PMEvent[] } | null>(null);
     const [isLoaded, setIsLoaded] = useState(false);
     const router = useRouter();
+
+    // Holiday states
+    const [holidays, setHolidays] = useState<Holiday[]>([]);
+    const [holidayModal, setHolidayModal] = useState<{
+        show: boolean;
+        date: Date | null;
+        existingHoliday: Holiday | null;
+    }>({ show: false, date: null, existingHoliday: null });
+    const [holidayName, setHolidayName] = useState('');
+    const [holidayDesc, setHolidayDesc] = useState('');
+    const [savingHoliday, setSavingHoliday] = useState(false);
+
+    const isAdmin = user?.systemRole === 'ADMIN';
 
     // Permission-based states
     const [rescheduleModal, setRescheduleModal] = useState<{
@@ -55,6 +76,7 @@ export default function CalendarPage() {
     useEffect(() => {
         if (!authLoading) {
             fetchSchedule();
+            fetchHolidays();
         }
     }, [currentMonth, authLoading]);
 
@@ -127,6 +149,93 @@ export default function CalendarPage() {
             });
     };
 
+    const fetchHolidays = () => {
+        const month = currentMonth.getMonth() + 1;
+        const year = currentMonth.getFullYear();
+        axios.get(`${config.apiServer}/api/holidays?month=${month}&year=${year}`)
+            .then(res => setHolidays(res.data || []))
+            .catch(err => console.error('Holidays Error:', err));
+    };
+
+    const getHolidayForDate = (date: Date): Holiday | undefined => {
+        return holidays.find(h => {
+            const holidayDate = new Date(h.date);
+            return holidayDate.getDate() === date.getDate() &&
+                holidayDate.getMonth() === date.getMonth() &&
+                holidayDate.getFullYear() === date.getFullYear();
+        });
+    };
+
+    const handleDateClick = (date: Date) => {
+        if (!isAdmin) return;
+        const dayOfWeek = date.getDay(); // 0=Sun, 6=Sat
+        let defaultName = '';
+        if (dayOfWeek === 0) defaultName = 'Sun';
+        if (dayOfWeek === 6) defaultName = 'Sat';
+
+        const existing = getHolidayForDate(date);
+        setHolidayName(existing?.name || defaultName);
+        setHolidayDesc(existing?.description || '');
+        setHolidayModal({ show: true, date, existingHoliday: existing || null });
+    };
+
+    const handleSaveHoliday = async () => {
+        if (!holidayModal.date || !holidayName.trim()) return;
+        setSavingHoliday(true);
+        try {
+            await axios.post(`${config.apiServer}/api/holidays`, {
+                date: holidayModal.date.toISOString(),
+                name: holidayName.trim(),
+                description: holidayDesc.trim() || null
+            });
+            fetchHolidays();
+            setHolidayModal({ show: false, date: null, existingHoliday: null });
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Failed to save holiday');
+        } finally {
+            setSavingHoliday(false);
+        }
+    };
+
+    const handleDeleteHoliday = async () => {
+        if (!holidayModal.existingHoliday) return;
+
+        const result = await Swal.fire({
+            title: 'ยืนยันการลบ?',
+            text: `ต้องการลบวันหยุด "${holidayModal.existingHoliday.name}" หรือไม่?`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc3545',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'ลบ',
+            cancelButtonText: 'ยกเลิก'
+        });
+
+        if (!result.isConfirmed) return;
+
+        setSavingHoliday(true);
+        try {
+            await axios.delete(`${config.apiServer}/api/holidays/${holidayModal.existingHoliday.id}`);
+            fetchHolidays();
+            setHolidayModal({ show: false, date: null, existingHoliday: null });
+            Swal.fire({
+                title: 'ลบสำเร็จ!',
+                text: 'ลบวันหยุดเรียบร้อยแล้ว',
+                icon: 'success',
+                timer: 1500,
+                showConfirmButton: false
+            });
+        } catch (err) {
+            Swal.fire({
+                title: 'เกิดข้อผิดพลาด',
+                text: 'ไม่สามารถลบวันหยุดได้',
+                icon: 'error'
+            });
+        } finally {
+            setSavingHoliday(false);
+        }
+    };
+
     const daysInMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate();
     const firstDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).getDay();
 
@@ -190,8 +299,33 @@ export default function CalendarPage() {
             return;
         }
 
-        if (event.type !== 'upcoming' && event.type !== 'overdue') {
-            return; // scheduled type - not clickable
+        if (event.type !== 'upcoming' && event.type !== 'overdue' && event.type !== 'scheduled') {
+            return; // Only upcoming, overdue, scheduled are clickable
+        }
+
+        // For scheduled type - only users with reschedule permission can click
+        if (event.type === 'scheduled') {
+            const permission = getUserPermission();
+            const canReschedule = permission === 'RESCHEDULE_ONLY' || permission === 'PM_AND_RESCHEDULE' || user?.systemRole === 'ADMIN';
+            if (!canReschedule) {
+                return; // No reschedule permission
+            }
+            // Check if user can access this machine
+            if (!canAccessMachine(event.machine.id)) {
+                return; // No access
+            }
+            // Open reschedule modal directly for scheduled type
+            const parts = event.id.split('-');
+            const typeId = parts.length >= 3 ? parseInt(parts[2]) : 0;
+            setRescheduleModal({
+                show: true,
+                machineId: event.machine.id,
+                machineName: event.machine.name,
+                preventiveTypeId: typeId,
+                preventiveTypeName: event.preventiveType?.name || '-',
+                currentDate: event.date
+            });
+            return;
         }
 
         // Check if user can access this machine
@@ -254,12 +388,15 @@ export default function CalendarPage() {
 
     const renderEventBadge = (event: PMEvent, idx: number, isModal: boolean = false) => {
         const eventColor = getEventColor(event);
-        const isClickable = event.type !== 'scheduled';
+        // Check if scheduled type is clickable based on permission
+        const permission = getUserPermission();
+        const canReschedule = permission === 'RESCHEDULE_ONLY' || permission === 'PM_AND_RESCHEDULE' || user?.systemRole === 'ADMIN';
+        const isClickable = event.type !== 'scheduled' || (event.type === 'scheduled' && canReschedule);
 
         return (
             <div
                 key={idx}
-                className={`${eventColor} rounded px-2 py-1 small shadow-sm mb-1`}
+                className={`${eventColor} rounded px-1 small shadow-sm mb-1`}
                 title={`${event.machine?.name || 'Unknown'} - ${getEventLabel(event)}${isClickable ? '\nคลิกเพื่อดูรายละเอียด' : ''}`}
                 onClick={(e: React.MouseEvent) => {
                     if (isClickable) {
@@ -292,7 +429,7 @@ export default function CalendarPage() {
         // Empty cells for days before month starts
         for (let i = 0; i < firstDay; i++) {
             days.push(
-                <div key={`empty-${i}`} className="border-end border-bottom bg-light" style={{ minHeight: '100px' }}></div>
+                <div key={`empty-${i}`} className="calendar-day border-end border-bottom bg-light"></div>
             );
         }
 
@@ -340,23 +477,44 @@ export default function CalendarPage() {
             dayEvents = Array.from(uniqueEventsMap.values());
 
             const isToday = new Date().toDateString() === date.toDateString();
-            const MAX_VISIBLE_EVENTS = 3;
+            const holiday = getHolidayForDate(date);
+            const isHoliday = !!holiday;
+            const MAX_VISIBLE_EVENTS = 2;
             const extraCount = dayEvents.length - MAX_VISIBLE_EVENTS;
+
+            // Background: Holiday (red) > Today (blue) > Default
+            let bgStyle = {};
+            if (isHoliday) {
+                bgStyle = { backgroundColor: 'rgba(220, 53, 69, 0.15)' };
+            } else if (isToday) {
+                bgStyle = { backgroundColor: 'rgba(13, 110, 253, 0.1)' };
+            }
 
             days.push(
                 <div
                     key={i}
-                    className={`border-end border-bottom p-2 ${isToday ? 'bg-primary bg-opacity-10' : ''}`}
-                    style={{ minHeight: '100px', cursor: 'pointer' }}
+                    className={`calendar-day border-end border-bottom p-2`}
+                    style={{ cursor: 'pointer', ...bgStyle }}
                     onClick={() => {
                         if (dayEvents.length > 0) {
                             setSelectedDateEvents({ date, events: dayEvents });
                         }
                     }}
                 >
-                    <div className={`fw-bold mb-2 ${isToday ? 'text-primary' : ''}`}>
-                        {i}
+                    <div className="d-flex align-items-center mb-2">
+                        <span
+                            className={`fw-bold ${isAdmin ? 'text-primary' : ''} ${isToday ? 'text-primary' : ''}`}
+                            style={{ cursor: isAdmin ? 'pointer' : 'default' }}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleDateClick(date);
+                            }}
+                            title={isAdmin ? 'คลิกเพื่อกำหนดวันหยุด' : ''}
+                        >
+                            {i}
+                        </span>
                         {isToday && <span className="ms-2 badge bg-primary rounded-pill" style={{ fontSize: '0.6em' }}>วันนี้</span>}
+                        {isHoliday && <span className="ms-2 badge bg-danger rounded-pill" style={{ fontSize: '0.6em' }}>{holiday.name}</span>}
                     </div>
                     <div className="d-flex flex-column">
                         {dayEvents.slice(0, MAX_VISIBLE_EVENTS).map((event, idx) => renderEventBadge(event, idx))}
@@ -381,9 +539,9 @@ export default function CalendarPage() {
     };
 
     return (
-        <div className="container-fluid py-4 bg-light min-vh-100 position-relative">
+        <div className="container-fluid py-3 bg-light position-relative" style={{ height: 'calc(100dvh - 56px)', overflow: 'hidden' }}>
             {/* Header */}
-            <div className="d-flex justify-content-between align-items-center mb-4">
+            <div className="d-flex justify-content-between align-items-center mb-0">
                 <div>
                     <h2 className="fw-bold text-dark mb-1">PM Calendar</h2>
                     <p className="text-muted mb-0">ปฏิทินการดูแลรักษาเชิงป้องกัน</p>
@@ -409,6 +567,9 @@ export default function CalendarPage() {
                 <div className="card-body p-3">
                     <div className="row g-2">
                         <div className="col-auto">
+                            <span className="badge px-3 py-2" style={{ backgroundColor: 'rgba(220, 53, 69, 0.15)', color: '#dc3545' }}>🔴 วันหยุด</span>
+                        </div>
+                        <div className="col-auto">
                             <span className="badge bg-success text-white px-3 py-2">✓ PM แล้ว</span>
                         </div>
                         <div className="col-auto">
@@ -425,8 +586,8 @@ export default function CalendarPage() {
             </div>
 
             {/* Calendar */}
-            <div className="card border-0 shadow-sm rounded-3">
-                <div className="card-body p-0">
+            <div className="card border-0 shadow-sm rounded-3 calendar-container">
+                <div className="card-body p-0 d-flex flex-column h-100">
                     {loading ? (
                         <div className="text-center py-5">
                             <div className="spinner-border text-primary" role="status">
@@ -434,12 +595,12 @@ export default function CalendarPage() {
                             </div>
                         </div>
                     ) : (
-                        <div className="d-grid" style={{ gridTemplateColumns: 'repeat(7, 1fr)' }}>
+                        <div className="calendar-grid h-100">
                             {/* Header row */}
                             {['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'].map((day, idx) => (
                                 <div
                                     key={day}
-                                    className={`bg-light border-end border-bottom p-3 fw-bold text-center ${idx === 0 || idx === 6 ? 'text-primary' : 'text-secondary'}`}
+                                    className={`bg-light border-end border-bottom p-2 fw-bold text-center ${idx === 0 || idx === 6 ? 'text-primary' : 'text-secondary'}`}
                                 >
                                     {day}
                                 </div>
@@ -496,6 +657,59 @@ export default function CalendarPage() {
                 onInspect={handlePopoverInspect}
                 onReschedule={handlePopoverReschedule}
             />
+
+            {/* Holiday Modal */}
+            {holidayModal.show && holidayModal.date && (
+                <div className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center" style={{ zIndex: 1050, backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                    <div className="card shadow-lg border-0 rounded-3" style={{ width: '400px' }}>
+                        <div className="card-header bg-danger text-white d-flex justify-content-between align-items-center py-3">
+                            <h5 className="mb-0 fw-bold">
+                                <i className="bi bi-calendar-x me-2"></i>
+                                {holidayModal.date.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                            </h5>
+                            <button type="button" className="btn-close btn-close-white" onClick={() => setHolidayModal({ show: false, date: null, existingHoliday: null })}></button>
+                        </div>
+                        <div className="card-body p-4">
+                            {holidayModal.existingHoliday && (
+                                <div className="alert alert-danger d-flex justify-content-between align-items-center mb-3">
+                                    <span><strong>วันหยุด:</strong> {holidayModal.existingHoliday.name}</span>
+                                    <button className="btn btn-sm btn-outline-danger" onClick={handleDeleteHoliday} disabled={savingHoliday}>
+                                        <i className="bi bi-trash"></i> ลบ
+                                    </button>
+                                </div>
+                            )}
+                            <div className="mb-3">
+                                <label className="form-label fw-bold">ชื่อวันหยุด <span className="text-danger">*</span></label>
+                                <input
+                                    type="text"
+                                    className="form-control"
+                                    value={holidayName}
+                                    onChange={(e) => setHolidayName(e.target.value)}
+                                    placeholder="เช่น วันปีใหม่, Sat, Sun"
+                                />
+                            </div>
+                            <div className="mb-3">
+                                <label className="form-label fw-bold">รายละเอียด</label>
+                                <input
+                                    type="text"
+                                    className="form-control"
+                                    value={holidayDesc}
+                                    onChange={(e) => setHolidayDesc(e.target.value)}
+                                    placeholder="(ไม่บังคับ)"
+                                />
+                            </div>
+                        </div>
+                        <div className="card-footer bg-light d-flex justify-content-end gap-2">
+                            <button className="btn btn-secondary" onClick={() => setHolidayModal({ show: false, date: null, existingHoliday: null })}>ปิด</button>
+                            {!holidayModal.existingHoliday && (
+                                <button className="btn btn-danger" onClick={handleSaveHoliday} disabled={savingHoliday || !holidayName.trim()}>
+                                    {savingHoliday ? <><span className="spinner-border spinner-border-sm me-2"></span>กำลังบันทึก...</> : <><i className="bi bi-plus-lg me-1"></i>เพิ่มวันหยุด</>}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

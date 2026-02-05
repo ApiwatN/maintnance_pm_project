@@ -200,11 +200,182 @@ body {
 }
 
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .spin-animation {
-    animation: spin 1s linear infinite;
-    display: inline-block;
+  animation: spin 1s linear infinite;
+  display: inline-block;
+}
+
+/* Custom Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.modal-content-custom {
+  background: white;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  animation: scaleIn 0.15s ease-out;
+}
+
+.modal-header-custom {
+  padding: 1rem;
+  border-bottom: 1px solid #dee2e6;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}
+
+.modal-header-custom.ng {
+  background-color: #fee2e2;
+  color: #dc3545;
+}
+
+.modal-header-custom.upcoming {
+  background-color: #fef3c7;
+  color: #d97706;
+}
+
+.modal-header-custom.overdue {
+  background-color: #fee2e2;
+  color: #dc3545;
+}
+
+.modal-header-custom.completed {
+  background-color: #d1e7dd;
+  color: #0f5132;
+}
+
+.modal-header-custom.total {
+  background-color: #cfe2ff;
+  color: #084298;
+}
+
+.modal-header-custom.total_pm {
+  background-color: #cff4fc;
+  color: #055160;
+}
+
+.modal-body-custom {
+  padding: 1rem;
+  overflow-y: auto;
+}
+
+.btn-close-custom {
+  background: transparent;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.btn-close-custom:hover {
+  opacity: 1;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Yellow Blinking Animation for DUE TODAY status */
+@keyframes blinkWarning {
+
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 8px rgba(255, 193, 7, 0.8);
+  }
+
+  50% {
+    opacity: 0.6;
+    box-shadow: 0 0 15px rgba(255, 193, 7, 1);
+  }
+}
+
+.blink-warning {
+  animation: blinkWarning 1s ease-in-out infinite;
+}
+
+/* Calendar FHD Optimization */
+.calendar-container {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 180px);
+  /* dvh = dynamic viewport height */
+}
+
+.calendar-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-template-rows: auto repeat(6, 1fr);
+}
+
+.calendar-day {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* จอ FHD ขึ้นไป - พอดีหน้าจอ */
+@media (min-height: 900px) {
+  .calendar-container {
+    height: calc(100dvh - 170px);
+  }
+}
+
+/* จอเล็กกว่า FHD - มี scroll ได้ */
+@media (max-height: 899px) {
+  .calendar-container {
+    height: auto;
+    min-height: 500px;
+  }
+
+  .calendar-day {
+    min-height: 90px;
+  }
 }

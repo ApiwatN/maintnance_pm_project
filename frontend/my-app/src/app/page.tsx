@@ -309,6 +309,110 @@ export default function Home() {
     };
   }, [filteredMachines]);
 
+  // Modal state
+  const [showModal, setShowModal] = useState(false);
+  const [modalData, setModalData] = useState<{
+    title: string;
+    items: any[];
+    type: 'ng' | 'upcoming' | 'overdue' | 'total' | 'total_pm' | 'completed' | null
+  }>({ title: '', items: [], type: null });
+
+  // Modal data - computed from filteredMachines (reusing "tooltipData" name for compatibility/simplicity)
+  const tooltipData = useMemo(() => {
+    const today = new Date();
+
+    const ngMachines = filteredMachines
+      .filter(m => m.lastCheckStatus === 'HAS_NG')
+      .map(m => ({
+        name: m.name,
+        pmType: m.preventiveType?.name || '-'
+      }));
+
+    const upcomingMachines = filteredMachines
+      .filter(m => m.lastCheckStatus !== 'HAS_NG' && m.status === 'UPCOMING')
+      .map(m => {
+        const nextDate = m.pmConfig?.nextPMDate ? new Date(m.pmConfig.nextPMDate) : null;
+        const daysLeft = nextDate ? Math.ceil((nextDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : 0;
+        return {
+          name: m.name,
+          pmType: m.preventiveType?.name || '-',
+          daysLeft
+        };
+      });
+
+    const overdueMachines = filteredMachines
+      .filter(m => m.lastCheckStatus !== 'HAS_NG' && m.status === 'OVERDUE')
+      .map(m => {
+        const nextDate = m.pmConfig?.nextPMDate ? new Date(m.pmConfig.nextPMDate) : null;
+        const daysOverdue = nextDate ? Math.ceil((today.getTime() - nextDate.getTime()) / (1000 * 60 * 60 * 24)) : 0;
+        return {
+          name: m.name,
+          pmType: m.preventiveType?.name || '-',
+          daysOverdue
+        };
+      });
+
+    const completedMachines = filteredMachines
+      .filter(m => m.lastCheckStatus === 'ALL_OK' || (m.status === 'OK' && m.lastCheckStatus !== 'HAS_NG'))
+      .map(m => ({
+        name: m.name,
+        pmType: m.preventiveType?.name || '-'
+      }));
+
+    const totalPMMachines = filteredMachines.map(m => ({
+      name: m.name,
+      pmType: m.preventiveType?.name || '-'
+    }));
+
+    // For Unique Machines, we need to dedup by ID or Code
+    const uniqueMap = new Map();
+    filteredMachines.forEach(m => {
+      if (!uniqueMap.has(m.id)) {
+        uniqueMap.set(m.id, {
+          name: m.name,
+          model: m.model || '-'
+        });
+      }
+    });
+    const totalUniqueMachines = Array.from(uniqueMap.values());
+
+    return { ngMachines, upcomingMachines, overdueMachines, completedMachines, totalPMMachines, totalUniqueMachines };
+  }, [filteredMachines]);
+
+  const handleShowModal = (type: 'ng' | 'upcoming' | 'overdue' | 'total' | 'total_pm' | 'completed') => {
+    let items: any[] = [];
+    let title = '';
+
+    if (type === 'ng') {
+      items = tooltipData.ngMachines;
+      title = `รายการที่พบ NG (${items.length} รายการ)`;
+    } else if (type === 'upcoming') {
+      items = tooltipData.upcomingMachines;
+      title = `ใกล้ถึงกำหนด PM (${items.length} รายการ)`;
+    } else if (type === 'overdue') {
+      items = tooltipData.overdueMachines;
+      title = `เกินกำหนด PM (${items.length} รายการ)`;
+    } else if (type === 'completed') {
+      items = tooltipData.completedMachines;
+      title = `ดำเนินการเรียบร้อย (${items.length} รายการ)`;
+    } else if (type === 'total_pm') {
+      items = tooltipData.totalPMMachines;
+      title = `รายการ PM ทั้งหมด (${items.length} รายการ)`;
+    } else if (type === 'total') {
+      items = tooltipData.totalUniqueMachines;
+      title = `จำนวนเครื่องจักรทั้งหมด (${items.length} เครื่อง)`;
+    }
+
+    if (items.length > 0) {
+      setModalData({ title, items, type });
+      setShowModal(true);
+    }
+  };
+
+  const handleCloseModal = () => {
+    setShowModal(false);
+  };
+
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentItems = filteredMachines.slice(indexOfFirstItem, indexOfLastItem);
@@ -408,8 +512,12 @@ export default function Home() {
         {/* KPI Cards */}
         <div className="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-6 g-4 mb-5">
           <div className="col">
-            <div className="card border-0 shadow-sm h-100 overflow-hidden bg-primary bg-opacity-10">
-              <div className="card-body position-relative">
+            <div
+              className="card border-0 shadow-sm h-100 overflow-hidden bg-primary bg-opacity-10 position-relative"
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleShowModal('total')}
+            >
+              <div className="card-body position-relative d-flex flex-column">
                 <div className="d-flex justify-content-between align-items-start">
                   <div>
                     <p className="text-muted mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Total Machines</p>
@@ -419,7 +527,7 @@ export default function Home() {
                     <i className="bi bi-hdd-stack fs-4"></i>
                   </div>
                 </div>
-                <div className="mt-3">
+                <div className="mt-3 mt-auto">
                   <span className="badge bg-primary bg-opacity-10 text-primary rounded-pill">
                     <i className="bi bi-check-lg me-1"></i>ใช้งานอยู่
                   </span>
@@ -428,8 +536,12 @@ export default function Home() {
             </div>
           </div>
           <div className="col">
-            <div className="card border-0 shadow-sm h-100 overflow-hidden bg-info bg-opacity-10">
-              <div className="card-body position-relative">
+            <div
+              className="card border-0 shadow-sm h-100 overflow-hidden bg-info bg-opacity-10 position-relative"
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleShowModal('total_pm')}
+            >
+              <div className="card-body position-relative d-flex flex-column">
                 <div className="d-flex justify-content-between align-items-start">
                   <div>
                     <p className="text-muted mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Total PM</p>
@@ -439,17 +551,21 @@ export default function Home() {
                     <i className="bi bi-list-check fs-4"></i>
                   </div>
                 </div>
-                <div className="mt-3">
+                <div className="mt-3 mt-auto">
                   <span className="badge bg-info bg-opacity-10 text-info rounded-pill">
-                    <i className="bi bi-clipboard-data me-1"></i>รายการเฝ้าระวัง
+                    <i className="bi bi-clipboard-data me-1"></i>ยังไม่ใกล้ถึงกำหนด
                   </span>
                 </div>
               </div>
             </div>
           </div>
           <div className="col">
-            <div className="card border-0 shadow-sm h-100 overflow-hidden bg-success bg-opacity-10">
-              <div className="card-body position-relative">
+            <div
+              className="card border-0 shadow-sm h-100 overflow-hidden bg-success bg-opacity-10 position-relative"
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleShowModal('completed')}
+            >
+              <div className="card-body position-relative d-flex flex-column">
                 <div className="d-flex justify-content-between align-items-start">
                   <div>
                     <p className="text-muted mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Completed</p>
@@ -459,30 +575,30 @@ export default function Home() {
                     <i className="bi bi-check-circle fs-4"></i>
                   </div>
                 </div>
-                <div className="mt-3">
+                <div className="mt-3 mt-auto">
                   <span className="text-muted small">ดำเนินการเรียบร้อย</span>
                 </div>
               </div>
             </div>
           </div>
-          {/* CHECKED (NG) CARD - NEW */}
+          {/* CHECKED (NG) CARD */}
           <div className="col">
-            <div className="card border-0 shadow-sm h-100 overflow-hidden bg-danger bg-opacity-10">
-              {/* Use a slightly different style or same as Overdue? User wants distinction. 
-                 Let's use Danger (Red) for NG as well, as it is critical.
-             */}
-              <div className="card-body position-relative">
+            <div
+              className="card border-0 shadow-sm h-100 overflow-hidden bg-danger bg-opacity-10 position-relative"
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleShowModal('ng')}
+            >
+              <div className="card-body position-relative d-flex flex-column">
                 <div className="d-flex justify-content-between align-items-start">
                   <div>
                     <p className="text-muted mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Checked (NG)</p>
                     <h2 className="fw-bold text-danger mb-0">{summaryStats.has_ng || 0}</h2>
                   </div>
                   <div className="bg-danger text-white p-3 rounded-circle shadow-sm">
-                    {/* X Circle for NG */}
                     <i className="bi bi-x-circle-fill fs-4"></i>
                   </div>
                 </div>
-                <div className="mt-3">
+                <div className="mt-3 mt-auto">
                   <span className="badge bg-danger bg-opacity-10 text-danger rounded-pill">
                     พบความผิดปกติ
                   </span>
@@ -491,8 +607,12 @@ export default function Home() {
             </div>
           </div>
           <div className="col">
-            <div className="card border-0 shadow-sm h-100 overflow-hidden bg-warning bg-opacity-10">
-              <div className="card-body position-relative">
+            <div
+              className="card border-0 shadow-sm h-100 overflow-hidden bg-warning bg-opacity-10 position-relative"
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleShowModal('upcoming')}
+            >
+              <div className="card-body position-relative d-flex flex-column">
                 <div className="d-flex justify-content-between align-items-start">
                   <div>
                     <p className="text-muted mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Upcoming</p>
@@ -502,15 +622,19 @@ export default function Home() {
                     <i className="bi bi-clock-history fs-4"></i>
                   </div>
                 </div>
-                <div className="mt-3">
+                <div className="mt-3 mt-auto">
                   <span className="text-muted small">ถึงกำหนดแจ้งเตือน</span>
                 </div>
               </div>
             </div>
           </div>
           <div className="col">
-            <div className="card border-0 shadow-sm h-100 overflow-hidden bg-danger bg-opacity-10">
-              <div className="card-body position-relative">
+            <div
+              className="card border-0 shadow-sm h-100 overflow-hidden bg-danger bg-opacity-10 position-relative"
+              style={{ cursor: 'pointer' }}
+              onClick={() => handleShowModal('overdue')}
+            >
+              <div className="card-body position-relative d-flex flex-column">
                 <div className="d-flex justify-content-between align-items-start">
                   <div>
                     <p className="text-muted mb-1 text-uppercase fw-bold" style={{ fontSize: '0.8rem' }}>Overdue</p>
@@ -520,7 +644,7 @@ export default function Home() {
                     <i className="bi bi-exclamation-triangle fs-4"></i>
                   </div>
                 </div>
-                <div className="mt-3">
+                <div className="mt-3 mt-auto">
                   <span className="badge bg-danger bg-opacity-10 text-danger rounded-pill">
                     เกินกำหนดแล้ว
                   </span>
@@ -629,6 +753,44 @@ export default function Home() {
         currentDate={rescheduleModal.currentDate}
         onSuccess={fetchDashboardData}
       />
+
+      {/* KPI Details Modal */}
+      {showModal && (
+        <div className="modal-overlay" onClick={handleCloseModal}>
+          <div className="modal-content-custom" onClick={e => e.stopPropagation()}>
+            <div className={`modal-header-custom ${modalData.type || ''}`}>
+              <h5 className="mb-0 fw-bold">
+                {modalData.type === 'ng' && <i className="bi bi-x-circle-fill me-2"></i>}
+                {modalData.type === 'upcoming' && <i className="bi bi-clock-history me-2"></i>}
+                {modalData.type === 'overdue' && <i className="bi bi-exclamation-triangle-fill me-2"></i>}
+                {modalData.type === 'completed' && <i className="bi bi-check-circle-fill me-2"></i>}
+                {modalData.type === 'total' && <i className="bi bi-hdd-stack me-2"></i>}
+                {modalData.type === 'total_pm' && <i className="bi bi-list-check me-2"></i>}
+                {modalData.title}
+              </h5>
+              <button onClick={handleCloseModal} className="btn-close-custom" aria-label="Close">
+                <i className="bi bi-x-lg"></i>
+              </button>
+            </div>
+            <div className="modal-body-custom">
+              <div className="list-group list-group-flush">
+                {modalData.items.map((m, idx) => (
+                  <div key={idx} className="list-group-item d-flex justify-content-between align-items-center px-0">
+                    <div>
+                      <div className="fw-bold">{m.name}</div>
+                      {modalData.type !== 'total' && <span className="badge bg-info text-dark small">{m.pmType}</span>}
+                      {modalData.type === 'total' && <span className="text-muted small">{m.model}</span>}
+                    </div>
+                    {modalData.type === 'upcoming' && <span className="badge bg-warning text-dark">อีก {m.daysLeft} วัน</span>}
+                    {modalData.type === 'overdue' && <span className="badge bg-danger text-white">เกิน {m.daysOverdue} วัน</span>}
+                    {modalData.type === 'completed' && <i className="bi bi-check-circle-fill text-success fs-5"></i>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Action Popover */}
       <ActionPopover

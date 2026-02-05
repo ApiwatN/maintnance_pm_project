@@ -251,45 +251,11 @@ export default function PMHistoryPage() {
 
     useEffect(() => {
         processRecords();
-    }, [records]);
+    }, [records, selectedPMType, pmTypes]);
 
-    // Load filters from localStorage
-    useEffect(() => {
-        const savedFilters = localStorage.getItem("pmHistoryFilters");
-        if (savedFilters) {
-            try {
-                const p = JSON.parse(savedFilters);
-                if (p.year) setSelectedYear(p.year);
-                // Only restore navigation filters if no specific machine ID overrides them later
-                // But since async fetch overrides, we can just set them here.
-                if (p.area) setSelectedArea(p.area);
-                if (p.type) setSelectedType(p.type);
-                // We typically don't restore machineId if URL param 'machineId' exists and is valid
-                // But if the URL param is invalid (e.g. 'all'), we might want to?
-                // For now, let's restore it, and let the initialMachineId logic override if successful.
-                if (p.machineId && p.machineId !== initialMachineId) {
-                    // Only set if different, but actually checking !initialMachineId is safer for "Generic" view
-                    // But this page requires [machineId] param.
-                }
-            } catch (e) {
-                console.error("Failed to load filters", e);
-            }
-        }
-        setIsLoaded(true);
-    }, []);
+    // [REMOVED] Duplicate localStorage loading - now handled in main useEffect at lines 142-199
 
-    // Save filters to localStorage including selectedMachineId
-    // Save filters to localStorage including selectedMachineId
-    useEffect(() => {
-        if (!isLoaded) return;
-        const filters = {
-            year: selectedYear,
-            area: selectedArea,
-            type: selectedType,
-            machineId: selectedMachineId
-        };
-        localStorage.setItem("pmHistoryFilters", JSON.stringify(filters));
-    }, [selectedYear, selectedArea, selectedType, selectedMachineId, isLoaded]);
+    // [REMOVED] Duplicate save useEffect - already handled at lines 201-213 with pmType included
 
     const fetchHistory = () => {
         setLoading(true);

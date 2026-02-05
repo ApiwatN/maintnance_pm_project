@@ -13,6 +13,7 @@ const userMasterRoutes = require('./routes/userMasterRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const areaRoutes = require('./routes/areaRoutes');
+const holidayRoutes = require('./routes/holidayRoutes');
 const startScheduler = require('./scheduler');
 
 const http = require('http'); // Import http
@@ -92,6 +93,7 @@ app.use('/api/user-master', userMasterRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/areas', areaRoutes);
+app.use('/api/holidays', holidayRoutes);
 app.use('/api/auth', require('./routes/authRoutes'));
 
 app.get('/', (req, res) => {
