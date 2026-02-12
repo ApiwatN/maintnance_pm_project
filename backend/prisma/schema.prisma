@@ -192,6 +192,7 @@ model UserMaster {
   permissionType String @default("PM_ONLY") // "PM_ONLY", "RESCHEDULE_ONLY", "PM_AND_RESCHEDULE"
 
   assignedMachines Machine[] // [NEW] Machines assigned to this user
+  dateMarks        UserDateMark[] // [NEW] User's personal date marks
 }
 
 model Area {
@@ -206,8 +207,53 @@ model Holiday {
   date        DateTime @unique
   name        String
   description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+
+  // Recurring fields
+  isRecurring     Boolean   @default(false)
+  repeatEveryDays Int?
+  repeatStartDate DateTime?
+  repeatEndDate   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model UserDateMark {
+  id     Int        @id @default(autoincrement())
+  userId Int
+  user   UserMaster @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date   DateTime
+  color  String // Pastel color hex (e.g. #FFE0B2)
+  note   String? // Optional note
+
+  // Recurring fields
+  isRecurring     Boolean   @default(false)
+  repeatEveryDays Int?
+  repeatStartDate DateTime?
+  repeatEndDate   DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, date]) // One mark per user per date
+  @@index([userId])
+}
+
+// [NEW] Store default values for Additional Details section
+// Key: Machine + PM Type + all dropdown values combined
+// Value: TEXT field value
+model AdditionalDetailDefault {
+  id               Int    @id @default(autoincrement())
+  machineId        Int
+  preventiveTypeId Int
+  dropdownKey      String @default("{}") // JSON: {"checklistId":"value",...}
+  textChecklistId  Int // Checklist ID of the TEXT field
+  textValue        String @db.NVarChar(Max)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([machineId, preventiveTypeId, dropdownKey, textChecklistId])
+  @@index([machineId, preventiveTypeId])
 }
 
 // Update relationships

@@ -151,11 +151,13 @@ export default function InspectionForm() {
     checker: string;
     remark: string;
     details: { checklistId: number; isPass: boolean; value: string; remark: string; image?: string; imageBefore?: string; imageAfter?: string }[];
+    subItemDetails?: { [key: string]: { checklistId: number; topic?: string; subItemName: string; isPass?: boolean; value?: string; remark?: string } };
   }>({
     inspector: "",
     checker: "",
     remark: "",
-    details: []
+    details: [],
+    subItemDetails: {}
   });
 
   const [selectedTypeId, setSelectedTypeId] = useState<number | null>(null);
@@ -164,6 +166,13 @@ export default function InspectionForm() {
   // [NEW] Camera State
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [cameraTarget, setCameraTarget] = useState<{ index: number, type: 'before' | 'after', position: string } | null>(null);
+
+  // [NEW] Last PM Values - ค่าที่บันทึกครั้งล่าสุด
+  const [lastPMValues, setLastPMValues] = useState<{ [key: string]: string }>({});
+  const [lastPMDate, setLastPMDate] = useState<string | null>(null);
+
+  // [NEW] Additional Details defaults from database
+  const [additionalDefaults, setAdditionalDefaults] = useState<any[]>([]);
 
   const { loading } = useAuth();
 
@@ -292,10 +301,19 @@ export default function InspectionForm() {
   };
 
   const fetchMachine = (id: string) => {
-    axios.get(`${config.apiServer}/api/machines/${id}`)
+    const typeIdParam = searchParams.get('typeId');
+    const url = typeIdParam
+      ? `${config.apiServer}/api/machines/${id}?typeId=${typeIdParam}`
+      : `${config.apiServer}/api/machines/${id}`;
+
+    axios.get(url)
       .then(async (res) => {
         const data = res.data;
         setMachine(data);
+
+        // [NEW] Store last PM values and date
+        setLastPMValues(data.lastPMValues || {});
+        setLastPMDate(data.lastPMDate || null);
 
         let targetPlan: any = null;
         let sourceChecklists: Checklist[] = [];
@@ -395,42 +413,19 @@ export default function InspectionForm() {
       .catch((err) => console.error(err));
   };
 
+  // [NEW] Fetch additional defaults from database when machine/plan changes
   useEffect(() => {
-    if (!isViewMode && !isEditMode && machine && currentPlan && formData.details.length > 0) {
-      // Load saved additional details
-      const key = `pm_details_${machine.id}_${currentPlan.preventiveTypeId}`;
-      const saved = localStorage.getItem(key);
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          setFormData(prev => {
-            const newDetails = [...prev.details];
-            let hasChanges = false;
-
-            // Map saved values to details
-            Object.keys(parsed).forEach(checklistIdStr => {
-              const checklistId = parseInt(checklistIdStr);
-              // Find index in details array
-              const index = newDetails.findIndex(d => d.checklistId === checklistId);
-              if (index !== -1) {
-                // Only update if currently empty (don't overwrite if user already typed? 
-                // Actually, this runs on mount/plan change, so likely empty. 
-                // But safer to just overwrite as it's "restoring" state)
-                if (newDetails[index].value !== parsed[checklistId]) {
-                  newDetails[index] = { ...newDetails[index], value: parsed[checklistId] };
-                  hasChanges = true;
-                }
-              }
-            });
-
-            return hasChanges ? { ...prev, details: newDetails } : prev;
-          });
-        } catch (e) {
-          console.error("Failed to parse saved details", e);
-        }
-      }
+    if (!isViewMode && !isEditMode && machine && selectedTypeId) {
+      axios.get(`${config.apiServer}/api/additional-defaults/${machine.id}/${selectedTypeId}`)
+        .then(res => {
+          setAdditionalDefaults(res.data || []);
+        })
+        .catch(err => {
+          console.error('Failed to fetch additional defaults:', err);
+          setAdditionalDefaults([]);
+        });
     }
-  }, [machine?.id, currentPlan?.preventiveTypeId, isViewMode, isEditMode, formData.details.length]);
+  }, [machine?.id, selectedTypeId, isViewMode, isEditMode]);
 
   const handleImageUpload = (index: number, field: 'imageBefore' | 'imageAfter', position: string, file: File) => {
     if (!file) return;
@@ -531,6 +526,50 @@ export default function InspectionForm() {
     return { min, max };
   };
 
+  // [NEW] Build dropdownKey from all DROPDOWN values in detailChecklists
+  const buildDropdownKey = (details: any[], detailChecklists: any[]) => {
+    const dropdowns: { [checklistId: string]: string } = {};
+    detailChecklists.forEach((item: any) => {
+      if (item.type === 'DROPDOWN') {
+        const globalIndex = checklists.findIndex((c: any) => c.id === item.id);
+        const value = details[globalIndex]?.value || '';
+        if (value) {
+          dropdowns[item.id.toString()] = value;
+        }
+      }
+    });
+    // Sort keys to ensure consistent key order
+    const sortedKeys = Object.keys(dropdowns).sort();
+    const result: { [key: string]: string } = {};
+    sortedKeys.forEach(k => { result[k] = dropdowns[k]; });
+    return JSON.stringify(result);
+  };
+
+  // [NEW] Apply additional defaults (auto-fill TEXT fields based on dropdownKey)
+  const applyAdditionalDefaults = (currentDetails: any[], defaults: any[], detailChecklists: any[]) => {
+    const currentDropdownKey = buildDropdownKey(currentDetails, detailChecklists);
+    const newDetails = [...currentDetails];
+    let changed = false;
+
+    detailChecklists.forEach((item: any) => {
+      if (item.type === 'TEXT') {
+        const globalIndex = checklists.findIndex((c: any) => c.id === item.id);
+        // Find matching default
+        const matchingDefault = defaults.find(
+          (d: any) => d.dropdownKey === currentDropdownKey && d.textChecklistId === item.id
+        );
+        if (matchingDefault && newDetails[globalIndex]) {
+          if (newDetails[globalIndex].value !== matchingDefault.textValue) {
+            newDetails[globalIndex] = { ...newDetails[globalIndex], value: matchingDefault.textValue };
+            changed = true;
+          }
+        }
+      }
+    });
+
+    return changed ? newDetails : null;
+  };
+
   const handleDetailChange = (index: number, field: string, value: any) => {
     const newDetails = [...formData.details];
     newDetails[index] = { ...newDetails[index], [field]: value };
@@ -553,29 +592,27 @@ export default function InspectionForm() {
       }
     });
 
-    setFormData({ ...formData, details: newDetails });
-
-    // Save to LocalStorage if it is an "Additional Detail" (TEXT or DROPDOWN)
-    if (!isViewMode && !isEditMode && machine && currentPlan && field === 'value') {
-      const checklistType = currentChecklist?.type;
-      if (checklistType === 'TEXT' || checklistType === 'DROPDOWN') {
-        const key = `pm_details_${machine.id}_${currentPlan.preventiveTypeId}`;
-        const checklistId = newDetails[index].checklistId;
-        const valueToSave = value; // The new value
-
-        // We need to read current storage to merge, or maintain a separate state?
-        // Reading from LS every keystroke is okay but maybe debouncing is better? 
-        // For simplicity and robustness: Read, Update, Save.
-        try {
-          const existing = localStorage.getItem(key);
-          const data = existing ? JSON.parse(existing) : {};
-          data[checklistId] = valueToSave;
-          localStorage.setItem(key, JSON.stringify(data));
-        } catch (e) {
-          console.error("Failed to save detail", e);
+    // [NEW] Auto-fill TEXT fields when DROPDOWN changes
+    if (!isViewMode && !isEditMode && field === 'value' && currentChecklist?.type === 'DROPDOWN') {
+      // Get updated detail checklists
+      const opts = safeParseOptions(currentChecklist.options);
+      const hasSubItems = opts.subItems && opts.subItems.length > 0;
+      if (!hasSubItems) {
+        // This is an Additional Details dropdown - auto-fill TEXT fields
+        const detailChks = checklists.filter((c: any) => {
+          const o = safeParseOptions(c.options);
+          const hasSub = o.subItems && o.subItems.length > 0;
+          return (c.type === 'TEXT' || c.type === 'DROPDOWN') && !hasSub;
+        });
+        const filledDetails = applyAdditionalDefaults(newDetails, additionalDefaults, detailChks);
+        if (filledDetails) {
+          setFormData({ ...formData, details: filledDetails });
+          return; // Already set formData
         }
       }
     }
+
+    setFormData({ ...formData, details: newDetails });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -678,6 +715,67 @@ export default function InspectionForm() {
 
         apiCall
           .then((res) => {
+            // [NEW] Save additional defaults to database
+            if (!isViewMode && !isEditMode && machine && selectedTypeId) {
+              // Build dropdownKey and collect TEXT values
+              const rawChks = currentPlan?.preventiveType?.masterChecklists || machine?.checklists || [];
+              const activeChks = rawChks.filter((c: any) => c.isActive !== false);
+
+              // [DEBUG] Log checklist info
+              console.log('[DEBUG] activeChks:', activeChks.map((c: any) => ({ id: c.id, topic: c.topic, type: c.type, options: c.options })));
+              console.log('[DEBUG] formData.details:', formData.details);
+
+              // Filter: TEXT/DROPDOWN without subItems (i.e., "Additional Details")
+              const detailChks = activeChks.filter((c: any) => {
+                if (c.type !== 'TEXT' && c.type !== 'DROPDOWN') return false;
+                try {
+                  const opts = JSON.parse(c.options || '{}');
+                  const hasSub = opts.subItems && opts.subItems.length > 0;
+                  return !hasSub;
+                } catch { return true; } // If parse fails, assume no subItems
+              });
+
+              console.log('[DEBUG] detailChks (Additional Details):', detailChks.map((c: any) => ({ id: c.id, topic: c.topic, type: c.type })));
+
+              // Build dropdownKey - use detailChks that are DROPDOWN type
+              const dropdowns: { [key: string]: string } = {};
+              detailChks.forEach((item: any) => {
+                if (item.type === 'DROPDOWN') {
+                  const idx = activeChks.findIndex((c: any) => c.id === item.id);
+                  const val = formData.details[idx]?.value || '';
+                  console.log(`[DEBUG] Dropdown ${item.topic} (id=${item.id}): idx=${idx}, value="${val}"`);
+                  if (val) dropdowns[item.id.toString()] = val;
+                }
+              });
+              const sortedKeys = Object.keys(dropdowns).sort();
+              const result: { [key: string]: string } = {};
+              sortedKeys.forEach(k => { result[k] = dropdowns[k]; });
+              const dropdownKey = JSON.stringify(result);
+              console.log('[DEBUG] dropdownKey:', dropdownKey);
+
+              // Collect TEXT values
+              const textDefaults: { textChecklistId: number; textValue: string }[] = [];
+              detailChks.forEach((item: any) => {
+                if (item.type === 'TEXT') {
+                  const idx = activeChks.findIndex((c: any) => c.id === item.id);
+                  const val = formData.details[idx]?.value || '';
+                  if (val) {
+                    textDefaults.push({ textChecklistId: item.id, textValue: val });
+                  }
+                }
+              });
+
+              // Save to database (fire and forget)
+              if (textDefaults.length > 0) {
+                axios.post(`${config.apiServer}/api/additional-defaults`, {
+                  machineId: machine.id,
+                  preventiveTypeId: selectedTypeId,
+                  dropdownKey,
+                  textDefaults
+                }).catch(err => console.error('Failed to save additional defaults:', err));
+              }
+            }
+
             Swal.fire({
               title: isEditMode ? 'Updated!' : 'Submitted!',
               text: isEditMode ? 'PM Record has been updated.' : 'PM Record has been saved.',
@@ -725,6 +823,32 @@ export default function InspectionForm() {
     }
   };
 
+  // [NEW] Helper to parse dropdown options from checklist.options (exclude subItems)
+  const parseDropdownOptions = (optionsStr?: string): { label: string; spec?: string }[] => {
+    if (!optionsStr) return [];
+    try {
+      const parsed = JSON.parse(optionsStr);
+      // New format: { options: [{label, spec}], subItems?: [...] }
+      if (parsed.options && Array.isArray(parsed.options)) {
+        return parsed.options.filter((opt: any) => opt.label);
+      }
+      // Legacy Array format [{ label, spec }]
+      if (Array.isArray(parsed)) {
+        return parsed.filter((opt: any) => opt.label);
+      }
+      // Object format with numbered keys { "0": {label, spec}, "1": {...} }
+      const options: { label: string; spec?: string }[] = [];
+      for (const key in parsed) {
+        if (key !== 'subItems' && key !== 'options' && parsed[key]?.label) {
+          options.push(parsed[key]);
+        }
+      }
+      return options;
+    } catch {
+      return [];
+    }
+  };
+
   const imageChecklists = checklists.filter((c: any) => c.type === 'IMAGE');
   const standardChecklists = checklists.filter((c: any) => {
     // Only show items WITHOUT subItems in standard table
@@ -732,7 +856,12 @@ export default function InspectionForm() {
     const hasSubItems = opts.subItems && opts.subItems.length > 0;
     return (c.type === 'BOOLEAN' || c.type === 'NUMERIC') && !hasSubItems;
   });
-  const detailChecklists = checklists.filter((c: any) => c.type === 'TEXT' || c.type === 'DROPDOWN');
+  // [FIX] Only show TEXT/DROPDOWN that DO NOT have subItems in Additional Details
+  const detailChecklists = checklists.filter((c: any) => {
+    const opts = safeParseOptions(c.options);
+    const hasSubItems = opts.subItems && opts.subItems.length > 0;
+    return (c.type === 'TEXT' || c.type === 'DROPDOWN') && !hasSubItems;
+  });
 
   // [NEW] Filter Sub-Item checklists (items WITH subItems)
   const subItemChecklists = checklists.filter((c: any) => {
@@ -866,7 +995,16 @@ export default function InspectionForm() {
     return (
       <div className="card border-0 shadow-sm rounded-3 mb-4">
         <div className="card-header bg-info bg-opacity-75 text-white py-3">
-          <h5 className="mb-0 fw-bold"><i className="bi bi-layers me-2"></i>Detailed Inspection (Sub-Items)</h5>
+          <div className="d-flex justify-content-between align-items-center">
+            <h5 className="mb-0 fw-bold"><i className="bi bi-layers me-2"></i>Detailed Inspection (Sub-Items)</h5>
+            {/* [NEW] Show last PM date */}
+            {!isViewMode && !isEditMode && lastPMDate && (
+              <span className="badge bg-warning text-dark" style={{ fontSize: '0.8rem' }}>
+                <i className="bi bi-clock-history me-1"></i>
+                PM ล่าสุด: {new Date(lastPMDate).toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+          </div>
         </div>
         <div className="card-body p-0">
           {Object.entries(groups).map(([key, group]) => {
@@ -951,7 +1089,75 @@ export default function InspectionForm() {
                                         </small>
                                       )}
                                     </div>
+                                  ) : checklist.type === 'DROPDOWN' ? (
+                                    // [NEW] Dropdown select for sub-items
+                                    <div>
+                                      <select
+                                        className="form-select form-select-sm"
+                                        style={{ minWidth: '100px' }}
+                                        value={subDetail.value || ''}
+                                        onChange={(e) => {
+                                          const existingSubDetails = (formData as any).subItemDetails || {};
+                                          const newSubDetails = { ...existingSubDetails };
+                                          newSubDetails[subDetailKey] = {
+                                            ...subDetail,
+                                            value: e.target.value,
+                                            isPass: true, // DROPDOWN ไม่มี pass/fail
+                                            checklistId: checklist.id,
+                                            subItemName: name,
+                                            topic: checklist.topic
+                                          };
+                                          setFormData({ ...formData, subItemDetails: newSubDetails } as any);
+                                        }}
+                                        disabled={isViewMode}
+                                      >
+                                        <option value="">-- เลือก --</option>
+                                        {parseDropdownOptions(checklist.options).map((opt: any) => (
+                                          <option key={opt.label} value={opt.label}>
+                                            {opt.label}{opt.spec && ` (${opt.spec})`}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      {/* [NEW] Show last PM value */}
+                                      {!isViewMode && !isEditMode && lastPMValues[`${checklist.id}_${name}`] && (
+                                        <small className="text-muted d-block" style={{ fontSize: '0.7rem', marginTop: '2px' }}>
+                                          ({lastPMValues[`${checklist.id}_${name}`]})
+                                        </small>
+                                      )}
+                                    </div>
+                                  ) : checklist.type === 'TEXT' ? (
+                                    // [NEW] Text input for sub-items
+                                    <div>
+                                      <input
+                                        type="text"
+                                        className="form-control form-control-sm"
+                                        style={{ minWidth: '80px' }}
+                                        placeholder="..."
+                                        value={subDetail.value || ''}
+                                        onChange={(e) => {
+                                          const existingSubDetails = (formData as any).subItemDetails || {};
+                                          const newSubDetails = { ...existingSubDetails };
+                                          newSubDetails[subDetailKey] = {
+                                            ...subDetail,
+                                            value: e.target.value,
+                                            isPass: true, // TEXT ไม่มี pass/fail
+                                            checklistId: checklist.id,
+                                            subItemName: name,
+                                            topic: checklist.topic
+                                          };
+                                          setFormData({ ...formData, subItemDetails: newSubDetails } as any);
+                                        }}
+                                        disabled={isViewMode}
+                                      />
+                                      {/* [NEW] Show last PM value */}
+                                      {!isViewMode && !isEditMode && lastPMValues[`${checklist.id}_${name}`] && (
+                                        <small className="text-muted d-block" style={{ fontSize: '0.7rem', marginTop: '2px' }}>
+                                          ({lastPMValues[`${checklist.id}_${name}`]})
+                                        </small>
+                                      )}
+                                    </div>
                                   ) : (
+                                    // BOOLEAN: OK/NG buttons
                                     <div className="btn-group btn-group-sm" role="group">
                                       <input
                                         type="radio"
@@ -1010,7 +1216,7 @@ export default function InspectionForm() {
             );
           })}
         </div>
-      </div>
+      </div >
     );
   };
 

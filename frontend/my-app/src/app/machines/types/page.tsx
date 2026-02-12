@@ -258,19 +258,27 @@ export default function PreventiveTypes() {
         // Prepare payload
         const payload = { ...checklistData };
 
-        // Handle Dropdown Options
+
+        // Handle Dropdown Options (wrap in object to support subItems)
         if (payload.type === 'DROPDOWN') {
-            if (dropdownOptions.length > 0) {
-                payload.options = JSON.stringify(dropdownOptions);
+            if (dropdownOptions.length > 0 || subItems.length > 0) {
+                payload.options = JSON.stringify({
+                    options: dropdownOptions,
+                    ...(subItems.length > 0 && { subItems })
+                });
             }
         }
 
         // Handle Numeric Conditional Logic
         if (payload.type === 'NUMERIC' && conditionalLogic.enabled && conditionalLogic.parentId) {
-            payload.options = JSON.stringify({
+            const numericOptions: any = {
                 parentId: conditionalLogic.parentId,
                 conditions: conditionalLogic.conditions
-            });
+            };
+            if (subItems.length > 0) {
+                numericOptions.subItems = subItems;
+            }
+            payload.options = JSON.stringify(numericOptions);
         }
 
         // Handle Image Configuration
@@ -278,14 +286,11 @@ export default function PreventiveTypes() {
             payload.options = JSON.stringify(imageConfig);
         }
 
-        // [NEW] Handle Sub-Items (Fixtures) - Append to options if exists
-        if (subItems.length > 0) {
-            let currentOptions: any = {};
-            try {
-                if (payload.options) currentOptions = JSON.parse(payload.options);
-            } catch { /* ignore */ }
-            currentOptions.subItems = subItems;
-            payload.options = JSON.stringify(currentOptions);
+        // Handle Sub-Items for BOOLEAN and TEXT types
+        if (payload.type === 'BOOLEAN' || payload.type === 'TEXT') {
+            if (subItems.length > 0) {
+                payload.options = JSON.stringify({ subItems });
+            }
         }
 
         if (editingChecklistId) {
@@ -327,12 +332,13 @@ export default function PreventiveTypes() {
             try {
                 const parsed = JSON.parse(item.options);
                 if (Array.isArray(parsed)) {
-                    // New format: [{label, spec}]
+                    // Legacy format: [{label, spec}] array directly
                     setDropdownOptions(parsed);
+                } else if (parsed.options && Array.isArray(parsed.options)) {
+                    // New format: { options: [{label, spec}], subItems?: [...] }
+                    setDropdownOptions(parsed.options);
                 } else {
-                    // Legacy format (should not happen if array check works, but just in case)
-                    // Or if it was simple string? No, item.options is string.
-                    // If it's not JSON, JSON.parse throws.
+                    setDropdownOptions([]);
                 }
             } catch {
                 // Legacy CSV string
@@ -632,7 +638,9 @@ export default function PreventiveTypes() {
                                         className="img-fluid rounded"
                                         style={{ maxHeight: '100%', objectFit: 'contain' }}
                                         onError={(e) => {
-                                            (e.target as HTMLImageElement).src = 'https://via.placeholder.com/150?text=No+Image';
+                                            const img = e.target as HTMLImageElement;
+                                            img.onerror = null; // ป้องกัน loop
+                                            img.src = 'https://via.placeholder.com/150?text=No+Image';
                                         }}
                                     />
                                 ) : (

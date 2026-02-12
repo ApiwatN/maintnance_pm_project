@@ -2,22 +2,47 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "../../context/AuthContext";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 
 const Navbar = () => {
     const pathname = usePathname();
     const { user, logout } = useAuth();
     const [isNavCollapsed, setIsNavCollapsed] = useState(true);
+    const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+    const navRef = useRef<HTMLElement>(null);
+
+    const handleNavCollapse = () => setIsNavCollapsed(!isNavCollapsed);
+    const closeNav = () => {
+        setIsNavCollapsed(true);
+        setOpenDropdown(null);
+    };
+
+    const toggleDropdown = (name: string) => {
+        setOpenDropdown(prev => prev === name ? null : name);
+    };
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (navRef.current && !navRef.current.contains(e.target as Node)) {
+                setOpenDropdown(null);
+            }
+        };
+        document.addEventListener("click", handleClickOutside);
+        return () => document.removeEventListener("click", handleClickOutside);
+    }, []);
+
+    // Close dropdown on route change
+    useEffect(() => {
+        setOpenDropdown(null);
+    }, [pathname]);
 
     if (!user) return null;
 
     const isAdmin = user.systemRole === 'ADMIN';
 
-    const handleNavCollapse = () => setIsNavCollapsed(!isNavCollapsed);
-    const closeNav = () => setIsNavCollapsed(true);
-
     return (
-        <nav className="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm sticky-top">
+        <nav className="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm sticky-top" ref={navRef}>
             <div className="container-fluid">
                 <Link href="/" className="navbar-brand d-flex align-items-center" onClick={closeNav}>
                     <i className="bi bi-tools fs-4 me-2"></i>
@@ -27,10 +52,8 @@ const Navbar = () => {
                 <button
                     className="navbar-toggler"
                     type="button"
-                    data-bs-toggle="collapse"
-                    data-bs-target="#navbarNav"
                     aria-controls="navbarNav"
-                    aria-expanded={!isNavCollapsed ? true : false}
+                    aria-expanded={!isNavCollapsed}
                     aria-label="Toggle navigation"
                     onClick={handleNavCollapse}
                 >
@@ -63,11 +86,17 @@ const Navbar = () => {
 
                         {isAdmin && (
                             <>
-                                <li className="nav-item dropdown">
-                                    <a className={`nav-link dropdown-toggle ${pathname.startsWith("/analysis") ? "active" : ""}`} href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <li className={`nav-item dropdown ${openDropdown === 'analysis' ? 'show' : ''}`}>
+                                    <a
+                                        className={`nav-link dropdown-toggle ${pathname.startsWith("/analysis") ? "active" : ""}`}
+                                        href="#"
+                                        role="button"
+                                        aria-expanded={openDropdown === 'analysis'}
+                                        onClick={(e) => { e.preventDefault(); toggleDropdown('analysis'); }}
+                                    >
                                         <i className="bi bi-graph-up me-1"></i> Analysis
                                     </a>
-                                    <ul className="dropdown-menu dropdown-menu-dark">
+                                    <ul className={`dropdown-menu dropdown-menu-dark ${openDropdown === 'analysis' ? 'show' : ''}`}>
                                         <li><Link href="/analysis/machine" className="dropdown-item" onClick={closeNav}>Machine Analysis</Link></li>
                                         <li><Link href="/analysis/operator" className="dropdown-item" onClick={closeNav}>Operator Analysis</Link></li>
                                     </ul>
@@ -82,8 +111,14 @@ const Navbar = () => {
                     </ul>
 
                     <div className="d-flex align-items-center">
-                        <div className="dropdown">
-                            <a href="#" className="d-flex align-items-center text-white text-decoration-none dropdown-toggle" id="dropdownUser1" data-bs-toggle="dropdown" aria-expanded="false">
+                        <div className={`dropdown ${openDropdown === 'user' ? 'show' : ''}`}>
+                            <a
+                                href="#"
+                                className="d-flex align-items-center text-white text-decoration-none dropdown-toggle"
+                                id="dropdownUser1"
+                                aria-expanded={openDropdown === 'user'}
+                                onClick={(e) => { e.preventDefault(); toggleDropdown('user'); }}
+                            >
                                 <div className="bg-primary rounded-circle d-flex justify-content-center align-items-center me-2" style={{ width: '32px', height: '32px' }}>
                                     <span className="fw-bold small">{user.username.substring(0, 2).toUpperCase()}</span>
                                 </div>
@@ -92,7 +127,7 @@ const Navbar = () => {
                                     <div className="text-white-50" style={{ fontSize: '0.7rem' }}>{user.systemRole}</div>
                                 </div>
                             </a>
-                            <ul className="dropdown-menu dropdown-menu-dark dropdown-menu-end text-small shadow" aria-labelledby="dropdownUser1">
+                            <ul className={`dropdown-menu dropdown-menu-dark dropdown-menu-end text-small shadow ${openDropdown === 'user' ? 'show' : ''}`} aria-labelledby="dropdownUser1">
                                 <li><button className="dropdown-item" onClick={logout}>Sign out</button></li>
                             </ul>
                         </div>
@@ -104,3 +139,4 @@ const Navbar = () => {
 };
 
 export default Navbar;
+

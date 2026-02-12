@@ -32,7 +32,31 @@ interface Holiday {
     date: string;
     name: string;
     description?: string;
+    isRecurring?: boolean;
+    repeatEveryDays?: number;
+    repeatStartDate?: string;
+    repeatEndDate?: string;
 }
+
+interface UserDateMark {
+    id: number;
+    date: string;
+    color: string;
+    note?: string;
+    isRecurring?: boolean;
+    repeatEveryDays?: number;
+    repeatStartDate?: string;
+    repeatEndDate?: string;
+}
+
+// Pastel colors for user marks (excluding red which is for admin holidays)
+const USER_MARK_COLORS = [
+    { hex: '#FFE0B2', name: 'ส้มอ่อน' },
+    { hex: '#FFF9C4', name: 'เหลืองอ่อน' },
+    { hex: '#C8E6C9', name: 'เขียวอ่อน' },
+    { hex: '#BBDEFB', name: 'ฟ้าอ่อน' },
+    { hex: '#E1BEE7', name: 'ม่วงอ่อน' },
+];
 
 export default function CalendarPage() {
     const { socket } = useSocket();
@@ -54,6 +78,26 @@ export default function CalendarPage() {
     const [holidayName, setHolidayName] = useState('');
     const [holidayDesc, setHolidayDesc] = useState('');
     const [savingHoliday, setSavingHoliday] = useState(false);
+    // Recurring fields for holiday
+    const [holidayRecurring, setHolidayRecurring] = useState(false);
+    const [holidayRepeatDays, setHolidayRepeatDays] = useState<number>(7);
+    const [holidayRepeatStart, setHolidayRepeatStart] = useState('');
+    const [holidayRepeatEnd, setHolidayRepeatEnd] = useState('');
+
+    // User Date Mark states
+    const [userMarks, setUserMarks] = useState<UserDateMark[]>([]);
+    const [dateMarkModal, setDateMarkModal] = useState<{
+        show: boolean;
+        date: Date | null;
+        existingMark: UserDateMark | null;
+    }>({ show: false, date: null, existingMark: null });
+    const [markColor, setMarkColor] = useState(USER_MARK_COLORS[0].hex);
+    const [markNote, setMarkNote] = useState('');
+    const [markRecurring, setMarkRecurring] = useState(false);
+    const [markRepeatDays, setMarkRepeatDays] = useState<number>(7);
+    const [markRepeatStart, setMarkRepeatStart] = useState('');
+    const [markRepeatEnd, setMarkRepeatEnd] = useState('');
+    const [savingMark, setSavingMark] = useState(false);
 
     const isAdmin = user?.systemRole === 'ADMIN';
 
@@ -77,6 +121,7 @@ export default function CalendarPage() {
         if (!authLoading) {
             fetchSchedule();
             fetchHolidays();
+            fetchUserMarks();
         }
     }, [currentMonth, authLoading]);
 
@@ -166,32 +211,165 @@ export default function CalendarPage() {
         });
     };
 
-    const handleDateClick = (date: Date) => {
-        if (!isAdmin) return;
-        const dayOfWeek = date.getDay(); // 0=Sun, 6=Sat
-        let defaultName = '';
-        if (dayOfWeek === 0) defaultName = 'Sun';
-        if (dayOfWeek === 6) defaultName = 'Sat';
+    const fetchUserMarks = () => {
+        if (!user) return;
+        const month = currentMonth.getMonth() + 1;
+        const year = currentMonth.getFullYear();
+        axios.get(`${config.apiServer}/api/date-marks?month=${month}&year=${year}`)
+            .then(res => setUserMarks(res.data || []))
+            .catch(err => console.error('User Marks Error:', err));
+    };
 
-        const existing = getHolidayForDate(date);
-        setHolidayName(existing?.name || defaultName);
-        setHolidayDesc(existing?.description || '');
-        setHolidayModal({ show: true, date, existingHoliday: existing || null });
+    const getUserMarkForDate = (date: Date): UserDateMark | undefined => {
+        return userMarks.find(m => {
+            const markDate = new Date(m.date);
+            return markDate.getDate() === date.getDate() &&
+                markDate.getMonth() === date.getMonth() &&
+                markDate.getFullYear() === date.getFullYear();
+        });
+    };
+
+    // Handle date number click - Admin: Holiday, User: Personal Mark
+    const handleDateClick = (date: Date) => {
+        console.log('handleDateClick called', { date, user, isAdmin, systemRole: user?.systemRole });
+        if (isAdmin) {
+            // Admin: Open Holiday Modal
+            const dayOfWeek = date.getDay();
+            let defaultName = '';
+            if (dayOfWeek === 0) defaultName = 'Sun';
+            if (dayOfWeek === 6) defaultName = 'Sat';
+
+            const existing = getHolidayForDate(date);
+            setHolidayName(existing?.name || defaultName);
+            setHolidayDesc(existing?.description || '');
+            setHolidayRecurring(existing?.isRecurring || false);
+            setHolidayRepeatDays(existing?.repeatEveryDays || 7);
+            setHolidayRepeatStart(existing?.repeatStartDate?.split('T')[0] || date.toISOString().split('T')[0]);
+            setHolidayRepeatEnd(existing?.repeatEndDate?.split('T')[0] || '');
+            setHolidayModal({ show: true, date, existingHoliday: existing || null });
+        } else if (user) {
+            // User: Open Date Mark Modal
+            const existing = getUserMarkForDate(date);
+            setMarkColor(existing?.color || USER_MARK_COLORS[0].hex);
+            setMarkNote(existing?.note || '');
+            setMarkRecurring(existing?.isRecurring || false);
+            setMarkRepeatDays(existing?.repeatEveryDays || 7);
+            setMarkRepeatStart(existing?.repeatStartDate?.split('T')[0] || date.toISOString().split('T')[0]);
+            setMarkRepeatEnd(existing?.repeatEndDate?.split('T')[0] || '');
+            setDateMarkModal({ show: true, date, existingMark: existing || null });
+        }
+    };
+
+    const handleSaveDateMark = async () => {
+        if (!dateMarkModal.date) return;
+        setSavingMark(true);
+        try {
+            await axios.post(`${config.apiServer}/api/date-marks`, {
+                date: dateMarkModal.date.toISOString(),
+                color: markColor,
+                note: markNote.trim() || null,
+                isRecurring: markRecurring,
+                repeatEveryDays: markRecurring ? markRepeatDays : null,
+                repeatStartDate: markRecurring ? markRepeatStart : null,
+                repeatEndDate: markRecurring ? markRepeatEnd : null
+            });
+            fetchUserMarks();
+            setDateMarkModal({ show: false, date: null, existingMark: null });
+            Swal.fire({
+                title: 'บันทึกสำเร็จ!',
+                icon: 'success',
+                timer: 1000,
+                showConfirmButton: false
+            });
+        } catch (err: any) {
+            Swal.fire({
+                title: 'เกิดข้อผิดพลาด',
+                text: err.response?.data?.error || 'ไม่สามารถบันทึกได้',
+                icon: 'error'
+            });
+        } finally {
+            setSavingMark(false);
+        }
+    };
+
+    const handleDeleteDateMark = async () => {
+        if (!dateMarkModal.existingMark) return;
+
+        const result = await Swal.fire({
+            title: 'ยืนยันการลบ?',
+            text: 'ต้องการลบ Mark นี้หรือไม่?',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc3545',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'ลบ',
+            cancelButtonText: 'ยกเลิก'
+        });
+
+        if (!result.isConfirmed) return;
+
+        setSavingMark(true);
+        try {
+            await axios.delete(`${config.apiServer}/api/date-marks/${dateMarkModal.existingMark.id}`);
+            fetchUserMarks();
+            setDateMarkModal({ show: false, date: null, existingMark: null });
+            Swal.fire({
+                title: 'ลบสำเร็จ!',
+                icon: 'success',
+                timer: 1000,
+                showConfirmButton: false
+            });
+        } catch (err) {
+            Swal.fire({
+                title: 'เกิดข้อผิดพลาด',
+                text: 'ไม่สามารถลบได้',
+                icon: 'error'
+            });
+        } finally {
+            setSavingMark(false);
+        }
     };
 
     const handleSaveHoliday = async () => {
         if (!holidayModal.date || !holidayName.trim()) return;
         setSavingHoliday(true);
         try {
-            await axios.post(`${config.apiServer}/api/holidays`, {
-                date: holidayModal.date.toISOString(),
-                name: holidayName.trim(),
-                description: holidayDesc.trim() || null
-            });
+            if (holidayModal.existingHoliday) {
+                // Update existing
+                await axios.put(`${config.apiServer}/api/holidays/${holidayModal.existingHoliday.id}`, {
+                    name: holidayName.trim(),
+                    description: holidayDesc.trim() || null,
+                    isRecurring: holidayRecurring,
+                    repeatEveryDays: holidayRecurring ? holidayRepeatDays : null,
+                    repeatStartDate: holidayRecurring ? holidayRepeatStart : null,
+                    repeatEndDate: holidayRecurring ? holidayRepeatEnd : null
+                });
+            } else {
+                // Create new
+                await axios.post(`${config.apiServer}/api/holidays`, {
+                    date: holidayModal.date.toISOString(),
+                    name: holidayName.trim(),
+                    description: holidayDesc.trim() || null,
+                    isRecurring: holidayRecurring,
+                    repeatEveryDays: holidayRecurring ? holidayRepeatDays : null,
+                    repeatStartDate: holidayRecurring ? holidayRepeatStart : null,
+                    repeatEndDate: holidayRecurring ? holidayRepeatEnd : null
+                });
+            }
             fetchHolidays();
             setHolidayModal({ show: false, date: null, existingHoliday: null });
+            Swal.fire({
+                title: 'บันทึกสำเร็จ!',
+                icon: 'success',
+                timer: 1000,
+                showConfirmButton: false
+            });
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to save holiday');
+            Swal.fire({
+                title: 'เกิดข้อผิดพลาด',
+                text: err.response?.data?.error || 'ไม่สามารถบันทึกได้',
+                icon: 'error'
+            });
         } finally {
             setSavingHoliday(false);
         }
@@ -479,15 +657,20 @@ export default function CalendarPage() {
             const isToday = new Date().toDateString() === date.toDateString();
             const holiday = getHolidayForDate(date);
             const isHoliday = !!holiday;
+            const userMark = getUserMarkForDate(date);
             const MAX_VISIBLE_EVENTS = 2;
             const extraCount = dayEvents.length - MAX_VISIBLE_EVENTS;
 
-            // Background: Holiday (red) > Today (blue) > Default
-            let bgStyle = {};
+            // Background priority: Holiday (red) > User Mark (user color) > Today (blue) > Default
+            let bgStyle: React.CSSProperties = {};
             if (isHoliday) {
-                bgStyle = { backgroundColor: 'rgba(220, 53, 69, 0.15)' };
+                // Admin Holiday always wins - red background (25% opacity)
+                bgStyle = { backgroundColor: 'rgba(220, 53, 69, 0.25)' };
+            } else if (userMark) {
+                // User mark - use user's color with opacity (45% = hex 73)
+                bgStyle = { backgroundColor: userMark.color + '73' };
             } else if (isToday) {
-                bgStyle = { backgroundColor: 'rgba(13, 110, 253, 0.1)' };
+                bgStyle = { backgroundColor: 'rgba(13, 110, 253, 0.15)' };
             }
 
             days.push(
@@ -503,18 +686,23 @@ export default function CalendarPage() {
                 >
                     <div className="d-flex align-items-center mb-2">
                         <span
-                            className={`fw-bold ${isAdmin ? 'text-primary' : ''} ${isToday ? 'text-primary' : ''}`}
-                            style={{ cursor: isAdmin ? 'pointer' : 'default' }}
+                            className={`fw-bold ${user ? 'text-primary' : ''} ${isToday ? 'text-primary' : ''}`}
+                            style={{ cursor: user ? 'pointer' : 'default' }}
                             onClick={(e) => {
                                 e.stopPropagation();
                                 handleDateClick(date);
                             }}
-                            title={isAdmin ? 'คลิกเพื่อกำหนดวันหยุด' : ''}
+                            title={isAdmin ? 'คลิกเพื่อกำหนดวันหยุด' : (user ? 'คลิกเพื่อ Mark วัน' : '')}
                         >
                             {i}
                         </span>
                         {isToday && <span className="ms-2 badge bg-primary rounded-pill" style={{ fontSize: '0.6em' }}>วันนี้</span>}
                         {isHoliday && <span className="ms-2 badge bg-danger rounded-pill" style={{ fontSize: '0.6em' }}>{holiday.name}</span>}
+                        {userMark && userMark.note && (
+                            <span className="ms-2 badge rounded-pill" style={{ fontSize: '0.6em', backgroundColor: userMark.color, color: '#333' }} title={userMark.note}>
+                                📝
+                            </span>
+                        )}
                     </div>
                     <div className="d-flex flex-column">
                         {dayEvents.slice(0, MAX_VISIBLE_EVENTS).map((event, idx) => renderEventBadge(event, idx))}
@@ -658,10 +846,10 @@ export default function CalendarPage() {
                 onReschedule={handlePopoverReschedule}
             />
 
-            {/* Holiday Modal */}
+            {/* Holiday Modal (Admin Only) */}
             {holidayModal.show && holidayModal.date && (
                 <div className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center" style={{ zIndex: 1050, backgroundColor: 'rgba(0,0,0,0.5)' }}>
-                    <div className="card shadow-lg border-0 rounded-3" style={{ width: '400px' }}>
+                    <div className="card shadow-lg border-0 rounded-3" style={{ width: '450px', maxHeight: '90vh', overflow: 'auto' }}>
                         <div className="card-header bg-danger text-white d-flex justify-content-between align-items-center py-3">
                             <h5 className="mb-0 fw-bold">
                                 <i className="bi bi-calendar-x me-2"></i>
@@ -698,14 +886,191 @@ export default function CalendarPage() {
                                     placeholder="(ไม่บังคับ)"
                                 />
                             </div>
+                            {/* Recurring Options */}
+                            <div className="border rounded p-3 bg-light">
+                                <div className="form-check mb-2">
+                                    <input
+                                        type="checkbox"
+                                        className="form-check-input"
+                                        id="holidayRecurring"
+                                        checked={holidayRecurring}
+                                        onChange={(e) => setHolidayRecurring(e.target.checked)}
+                                    />
+                                    <label className="form-check-label fw-bold" htmlFor="holidayRecurring">
+                                        <i className="bi bi-arrow-repeat me-1"></i> ซ้ำเป็นประจำ
+                                    </label>
+                                </div>
+                                {holidayRecurring && (
+                                    <div className="ms-4 mt-2">
+                                        <div className="mb-2">
+                                            <label className="form-label small">ซ้ำทุก</label>
+                                            <div className="input-group input-group-sm">
+                                                <input
+                                                    type="number"
+                                                    className="form-control"
+                                                    value={holidayRepeatDays}
+                                                    onChange={(e) => setHolidayRepeatDays(parseInt(e.target.value) || 1)}
+                                                    min={1}
+                                                />
+                                                <span className="input-group-text">วัน</span>
+                                            </div>
+                                        </div>
+                                        <div className="mb-2">
+                                            <label className="form-label small">เริ่มวันที่</label>
+                                            <input
+                                                type="date"
+                                                className="form-control form-control-sm"
+                                                value={holidayRepeatStart}
+                                                onChange={(e) => setHolidayRepeatStart(e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="mb-0">
+                                            <label className="form-label small">สิ้นสุดวันที่</label>
+                                            <input
+                                                type="date"
+                                                className="form-control form-control-sm"
+                                                value={holidayRepeatEnd}
+                                                onChange={(e) => setHolidayRepeatEnd(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                         <div className="card-footer bg-light d-flex justify-content-end gap-2">
                             <button className="btn btn-secondary" onClick={() => setHolidayModal({ show: false, date: null, existingHoliday: null })}>ปิด</button>
-                            {!holidayModal.existingHoliday && (
-                                <button className="btn btn-danger" onClick={handleSaveHoliday} disabled={savingHoliday || !holidayName.trim()}>
-                                    {savingHoliday ? <><span className="spinner-border spinner-border-sm me-2"></span>กำลังบันทึก...</> : <><i className="bi bi-plus-lg me-1"></i>เพิ่มวันหยุด</>}
-                                </button>
+                            <button className="btn btn-danger" onClick={handleSaveHoliday} disabled={savingHoliday || !holidayName.trim()}>
+                                {savingHoliday ? <><span className="spinner-border spinner-border-sm me-2"></span>กำลังบันทึก...</> : <><i className="bi bi-check-lg me-1"></i>บันทึก</>}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* User Date Mark Modal */}
+            {dateMarkModal.show && dateMarkModal.date && (
+                <div className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center" style={{ zIndex: 1050, backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                    <div className="card shadow-lg border-0 rounded-3" style={{ width: '450px', maxHeight: '90vh', overflow: 'auto' }}>
+                        <div className="card-header text-white d-flex justify-content-between align-items-center py-3" style={{ backgroundColor: markColor }}>
+                            <h5 className="mb-0 fw-bold" style={{ color: '#333' }}>
+                                <i className="bi bi-pin-fill me-2"></i>
+                                Mark วัน {dateMarkModal.date.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long' })}
+                            </h5>
+                            <button type="button" className="btn-close" onClick={() => setDateMarkModal({ show: false, date: null, existingMark: null })}></button>
+                        </div>
+                        <div className="card-body p-4">
+                            {dateMarkModal.existingMark && (
+                                <div className="alert d-flex justify-content-between align-items-center mb-3" style={{ backgroundColor: dateMarkModal.existingMark.color }}>
+                                    <span style={{ color: '#333' }}><strong>มี Mark อยู่แล้ว</strong></span>
+                                    <button className="btn btn-sm btn-outline-dark" onClick={handleDeleteDateMark} disabled={savingMark}>
+                                        <i className="bi bi-trash"></i> ลบ
+                                    </button>
+                                </div>
                             )}
+                            {/* Color Picker */}
+                            <div className="mb-3">
+                                <label className="form-label fw-bold">เลือกสี</label>
+                                <div className="d-flex gap-2 flex-wrap">
+                                    {USER_MARK_COLORS.map((color) => (
+                                        <button
+                                            key={color.hex}
+                                            type="button"
+                                            className={`btn rounded-circle p-0 ${markColor === color.hex ? 'border-3 border-dark' : 'border-2 border-secondary'}`}
+                                            style={{
+                                                width: '40px',
+                                                height: '40px',
+                                                backgroundColor: color.hex,
+                                                boxShadow: markColor === color.hex ? '0 0 0 3px rgba(0,0,0,0.3)' : 'none'
+                                            }}
+                                            onClick={() => setMarkColor(color.hex)}
+                                            title={color.name}
+                                        />
+                                    ))}
+                                    <button
+                                        type="button"
+                                        className={`btn rounded-circle p-0 border-2 border-secondary d-flex align-items-center justify-content-center`}
+                                        style={{ width: '40px', height: '40px', backgroundColor: '#fff' }}
+                                        onClick={() => {
+                                            setMarkColor('');
+                                            if (dateMarkModal.existingMark) {
+                                                handleDeleteDateMark();
+                                            } else {
+                                                setDateMarkModal({ show: false, date: null, existingMark: null });
+                                            }
+                                        }}
+                                        title="ลบสี"
+                                    >
+                                        <i className="bi bi-x-lg text-danger"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            {/* Note */}
+                            <div className="mb-3">
+                                <label className="form-label fw-bold">หมายเหตุ</label>
+                                <textarea
+                                    className="form-control"
+                                    rows={2}
+                                    value={markNote}
+                                    onChange={(e) => setMarkNote(e.target.value)}
+                                    placeholder="(ไม่บังคับ)"
+                                />
+                            </div>
+                            {/* Recurring Options */}
+                            <div className="border rounded p-3 bg-light">
+                                <div className="form-check mb-2">
+                                    <input
+                                        type="checkbox"
+                                        className="form-check-input"
+                                        id="markRecurring"
+                                        checked={markRecurring}
+                                        onChange={(e) => setMarkRecurring(e.target.checked)}
+                                    />
+                                    <label className="form-check-label fw-bold" htmlFor="markRecurring">
+                                        <i className="bi bi-arrow-repeat me-1"></i> ซ้ำเป็นประจำ
+                                    </label>
+                                </div>
+                                {markRecurring && (
+                                    <div className="ms-4 mt-2">
+                                        <div className="mb-2">
+                                            <label className="form-label small">ซ้ำทุก</label>
+                                            <div className="input-group input-group-sm">
+                                                <input
+                                                    type="number"
+                                                    className="form-control"
+                                                    value={markRepeatDays}
+                                                    onChange={(e) => setMarkRepeatDays(parseInt(e.target.value) || 1)}
+                                                    min={1}
+                                                />
+                                                <span className="input-group-text">วัน</span>
+                                            </div>
+                                        </div>
+                                        <div className="mb-2">
+                                            <label className="form-label small">เริ่มวันที่</label>
+                                            <input
+                                                type="date"
+                                                className="form-control form-control-sm"
+                                                value={markRepeatStart}
+                                                onChange={(e) => setMarkRepeatStart(e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="mb-0">
+                                            <label className="form-label small">สิ้นสุดวันที่</label>
+                                            <input
+                                                type="date"
+                                                className="form-control form-control-sm"
+                                                value={markRepeatEnd}
+                                                onChange={(e) => setMarkRepeatEnd(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="card-footer bg-light d-flex justify-content-end gap-2">
+                            <button className="btn btn-secondary" onClick={() => setDateMarkModal({ show: false, date: null, existingMark: null })}>ปิด</button>
+                            <button className="btn btn-primary" onClick={handleSaveDateMark} disabled={savingMark || !markColor}>
+                                {savingMark ? <><span className="spinner-border spinner-border-sm me-2"></span>กำลังบันทึก...</> : <><i className="bi bi-check-lg me-1"></i>บันทึก</>}
+                            </button>
                         </div>
                     </div>
                 </div>

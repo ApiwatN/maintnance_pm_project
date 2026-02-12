@@ -12,5 +12,6 @@ router.delete('/:id', preventiveTypeController.deleteType);
 router.post('/:id/checklists', preventiveTypeController.addMasterChecklist);
 router.put('/checklists/reorder', preventiveTypeController.reorderMasterChecklists);
 router.put('/checklists/:itemId', preventiveTypeController.updateMasterChecklist);
+router.delete('/checklists/:itemId', preventiveTypeController.deleteMasterChecklist);
 
 module.exports = router;

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "bootstrap/dist/css/bootstrap.min.css"; // Import Bootstrap CSS
 import "./globals.css";
 import ClientLayout from "./components/ClientLayout";
+import BootstrapClient from "./components/BootstrapClient";
 
 export const metadata: Metadata = {
   title: "Machine PM System",
@@ -22,8 +23,7 @@ export default function RootLayout({
         <ClientLayout>
           {children}
         </ClientLayout>
-        {/* Bootstrap JS Bundle with Popper */}
-        <script src="/bootstrap/js/bootstrap.bundle.min.js" async></script>
+        <BootstrapClient />
       </body>
     </html>
   );
