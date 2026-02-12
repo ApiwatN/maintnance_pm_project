@@ -6,15 +6,16 @@ import {
     PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
     BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts';
+import FailureDrilldownChart from "./FailureDrilldownChart";
 
 export default function MachineAnalysisPage() {
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
 
-    // Generate year options (current year - 5 to current year + 1)
+    // Generate year options (current year - 5 to current year + 2)
     const currentYear = new Date().getFullYear();
-    const years = Array.from({ length: 7 }, (_, i) => (currentYear - 5 + i).toString());
+    const years = Array.from({ length: 8 }, (_, i) => (currentYear - 5 + i).toString());
 
     useEffect(() => {
         fetchData();
@@ -124,27 +125,11 @@ export default function MachineAnalysisPage() {
                     </div>
                 </div>
 
-                {/* Common Failure Topics */}
+                {/* Failure Analysis Drilldown */}
                 <div className="col-12">
                     <div className="card border-0 shadow-sm">
-                        <div className="card-header bg-white fw-bold py-3">
-                            Common Failure Topics
-                        </div>
-                        <div className="card-body" style={{ height: '400px' }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart
-                                    layout="vertical"
-                                    data={data.failureTopics}
-                                    margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
-                                >
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis type="number" />
-                                    <YAxis dataKey="name" type="category" width={150} />
-                                    <Tooltip />
-                                    <Legend />
-                                    <Bar dataKey="count" name="Failure Count" fill="#ffc107" />
-                                </BarChart>
-                            </ResponsiveContainer>
+                        <div className="card-body" style={{ height: '500px' }}>
+                            <FailureDrilldownChart year={selectedYear} />
                         </div>
                     </div>
                 </div>

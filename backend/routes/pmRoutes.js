@@ -12,6 +12,7 @@ router.post('/record', authenticateToken, pmController.recordPM);
 router.put('/records/:id', authenticateToken, pmController.updateRecord);
 router.delete('/records/:id', authenticateToken, pmController.deleteRecord);
 router.get('/analysis/machine', authenticateToken, pmController.getMachineAnalysis);
+router.get('/analysis/failure-breakdown', authenticateToken, pmController.getFailureBreakdown); // [NEW] Drill-down analysis
 router.get('/analysis/operator', authenticateToken, pmController.getOperatorAnalysis);
 router.post('/reschedule', authenticateToken, pmController.reschedulePM);
 
